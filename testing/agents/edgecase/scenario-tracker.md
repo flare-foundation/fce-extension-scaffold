@@ -11,11 +11,11 @@ Track which scenarios have been tested and their results.
 
 | Done | Scenario | Last Run | Result | Error Clarity | Notes |
 |------|----------|----------|--------|---------------|-------|
-| [ ] | D1-wrong-registry | — | — | — | — |
-| [ ] | D3-zero-addresses | — | — | — | — |
-| [ ] | D4-double-deploy | — | — | — | — |
-| [ ] | D5-wrong-key | — | — | — | — |
-| [ ] | D7-output-capture | — | — | — | — |
+| [x] | D1-wrong-registry | 2026-04-13 | EXPECTED_FAIL | GOOD | Pre-flight catches wrong registry with clear error. .env overrides env vars (finding). |
+| [x] | D3-zero-addresses | 2026-04-13 | EXPECTED_FAIL | GOOD | Pre-flight catches zero address with specific error message. Fails fast. |
+| [x] | D4-double-deploy | 2026-04-13 | EXPECTED_FAIL | BAD | No warning on re-run. Silently overwrites extension.env, orphans on-chain state. |
+| [x] | D5-wrong-key | 2026-04-13 | EXPECTED_FAIL | GOOD | Pre-flight catches unfunded deployer with balance + minimum required in error. |
+| [x] | D7-output-capture | 2026-04-13 | EXPECTED_FAIL | MODERATE | Address capture clean via tail -1. But INFO logs go to stdout (fragile). |
 
 ## Registration (R-series)
 
