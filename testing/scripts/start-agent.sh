@@ -38,8 +38,8 @@ fi
 tmux new-session -d -s "$SESSION" -c "$AGENT_DIR"
 tmux send-keys -t "$SESSION" "claude --dangerously-skip-permissions $RESUME_FLAG" Enter
 
-# Confirm bypass-permissions prompt, then register heartbeat
+# Confirm bypass-permissions prompt
 sleep 8
 tmux send-keys -t "$SESSION" "" Enter || true
 sleep 15
-tmux send-keys -t "$SESSION" "/start-heartbeat" Enter || true
+# Agent is now idle — the sequencer will dispatch /heartbeat when it's this agent's turn

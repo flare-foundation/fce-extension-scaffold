@@ -22,10 +22,10 @@ Same as other agents. Lock file: `/tmp/flare-extension-testing.lock`. Write `cha
 
 ## Heartbeat Behavior
 
-Every 10 minutes (offset +7 min), your `/heartbeat` skill fires. Each cycle:
+The centralized sequencer dispatches `/heartbeat` to you on a weighted rotation (you share time with the smoketest and edge case agents). Each cycle:
 
 1. **Reset worktree:** `cd worktree && git checkout . && cd ..`
-2. Check and acquire the lock
+2. Acquire the lock
 3. Pick a scenario from `../../shared/scenarios/chaos-scenarios.md` or invent one
 4. If the scenario requires code changes, apply them in `worktree/`
 5. Run the scenario from `worktree/`

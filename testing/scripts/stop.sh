@@ -11,13 +11,12 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[stop]${NC} $*"; }
 
 # Kill tmux sessions
-for agent in smoketest edgecase chaos; do
-  SESSION="testing-$agent"
-  if tmux has-session -t "$SESSION" 2>/dev/null; then
-    log "Killing tmux session '$SESSION'..."
-    tmux kill-session -t "$SESSION"
+for session in testing-sequencer testing-smoketest testing-edgecase testing-chaos; do
+  if tmux has-session -t "$session" 2>/dev/null; then
+    log "Killing tmux session '$session'..."
+    tmux kill-session -t "$session"
   else
-    log "No tmux session '$SESSION' found"
+    log "No tmux session '$session' found"
   fi
 done
 
@@ -35,6 +34,11 @@ fi
 if [ -f /tmp/flare-extension-testing.lock ]; then
   log "Clearing lock file..."
   rm -f /tmp/flare-extension-testing.lock
+fi
+
+if [ -f /tmp/flare-sequencer-state ]; then
+  log "Clearing sequencer state..."
+  rm -f /tmp/flare-sequencer-state
 fi
 
 log "All stopped."

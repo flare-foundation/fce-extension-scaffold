@@ -6,9 +6,9 @@ Three specialized Claude Code agents that continuously test the Flare TEE extens
 
 | Agent | Focus | Cycle | What It Does |
 |-------|-------|-------|-------------|
-| **Smoketest** | Happy path | Every 10 min | Runs `full-setup.sh --test` and variants repeatedly. Catches regressions and flaky infrastructure. |
-| **Edge Case** | Systematic | Every 10 min (+3 offset) | Works through 20+ documented edge cases (D1-E9). Records whether errors match expectations and how clear the messages are. |
-| **Chaos** | Adversarial | Every 10 min (+7 offset) | Tries to break things creatively — concurrent deploys, mid-process kills, code modifications. Runs in its own git worktree so it can modify source code. |
+| **Smoketest** | Happy path | ~5 min (2/5 slots) | Runs `full-setup.sh --test` and variants repeatedly. Catches regressions and flaky infrastructure. |
+| **Edge Case** | Systematic | ~5 min (2/5 slots) | Works through 20+ documented edge cases (D1-E9). Records whether errors match expectations and how clear the messages are. |
+| **Chaos** | Adversarial | ~5 min (1/5 slots) | Tries to break things creatively — concurrent deploys, mid-process kills, code modifications. Runs in its own git worktree so it can modify source code. |
 
 ## How It Works
 
@@ -16,25 +16,29 @@ Three specialized Claude Code agents that continuously test the Flare TEE extens
 
 ```
 GCP VM (e2-standard-4, Ubuntu 22.04)
-├── tmux session "testing-smoketest"  (Claude Code CLI)
-├── tmux session "testing-edgecase"   (Claude Code CLI)
-├── tmux session "testing-chaos"      (Claude Code CLI)
+├── tmux session "testing-sequencer"  (rotation dispatcher)
+├── tmux session "testing-smoketest"  (Claude Code CLI, passive)
+├── tmux session "testing-edgecase"   (Claude Code CLI, passive)
+├── tmux session "testing-chaos"      (Claude Code CLI, passive)
 ├── ngrok (shared tunnel, exposes port 6674)
 ├── Docker (shared, one agent at a time)
 └── System cron (health-check.sh every 5 min)
 ```
 
-Each agent is a Claude Code CLI session with its own CLAUDE.md (identity/behavior), skills (heartbeat cycle, run-scenario), and hooks (audit-log, teardown). CronCreate triggers a `/heartbeat` skill every 10 minutes, which picks a scenario, runs it, and logs results.
+Each agent is a Claude Code CLI session with its own CLAUDE.md (identity/behavior), skills (heartbeat cycle, run-scenario), and hooks (audit-log, teardown). A centralized sequencer dispatches `/heartbeat` to each agent in a weighted rotation, which picks a scenario, runs it, and logs results.
 
-### Sequential Execution
+### Sequencer-Based Scheduling
 
 The deployment stack uses fixed ports (Redis 6382, ext-proxy 6674, etc.) and a single ngrok tunnel. Only one agent can have services running at a time.
 
+**Sequencer:** A persistent bash script (`scripts/sequencer.sh`) runs in its own tmux session. It cycles through a configurable weighted rotation, dispatching `/heartbeat` to each agent via `tmux send-keys`. Agents are passive — they sit idle until the sequencer tells them to go.
+
+**Rotation:** Configured in `shared/rotation.conf`. Default: `smoketest,edgecase,smoketest,edgecase,chaos` (2:2:1 weight). Edit the file to change weights — the sequencer picks up changes on the next cycle.
+
 **Lock file:** `/tmp/flare-extension-testing.lock`
-- Before each cycle, the agent checks the lock
-- If another agent holds it (< 10 min old), this cycle is skipped
-- If the lock is stale (> 10 min), it's cleared with a warning
-- Format: `agent-name|unix-timestamp`
+- The dispatched agent writes `agent-name|unix-timestamp` when it starts
+- The sequencer waits for the lock to clear before dispatching the next agent
+- If the lock exceeds 12 minutes (configurable), it's force-cleared
 - The Stop hook automatically clears the lock on crash/exit
 
 ### Chaos Worktree
@@ -149,6 +153,7 @@ cat testing/agents/smoketest/results/2026-04-11T14-30-00-full-setup-standard.md
 
 ```bash
 # Are the tmux sessions alive?
+tmux has-session -t testing-sequencer && echo "sequencer alive" || echo "sequencer dead"
 tmux has-session -t testing-smoketest && echo "smoketest alive" || echo "smoketest dead"
 tmux has-session -t testing-edgecase  && echo "edgecase alive"  || echo "edgecase dead"
 tmux has-session -t testing-chaos     && echo "chaos alive"     || echo "chaos dead"
@@ -239,7 +244,8 @@ crontab -l | grep -v health-check.sh | crontab -
 testing/
 ├── scripts/
 │   ├── setup.sh              # First-time VM setup (interactive)
-│   ├── start.sh              # Launch ngrok + 3 agents in tmux
+│   ├── start.sh              # Launch ngrok + sequencer + 3 agents in tmux
+│   ├── sequencer.sh          # Rotation dispatcher (persistent loop)
 │   ├── start-agent.sh        # Restart a single dead agent
 │   ├── stop.sh               # Stop everything
 │   └── health-check.sh       # Cron watchdog (every 5 min)
@@ -249,8 +255,7 @@ testing/
 │   │   ├── CLAUDE.md          # Agent identity and behavior
 │   │   ├── .claude/
 │   │   │   ├── settings.json  # Hooks (audit-log, teardown)
-│   │   │   ├── skills/        # heartbeat + run-scenario
-│   │   │   └── commands/      # start-heartbeat
+│   │   │   └── skills/        # heartbeat + run-scenario
 │   │   └── results/           # One .md file per test run
 │   │
 │   ├── edgecase/
@@ -266,6 +271,7 @@ testing/
 │       └── worktree/          # Git worktree (created by start.sh)
 │
 ├── shared/
+│   ├── rotation.conf          # Sequencer config (rotation order, timing)
 │   ├── hooks/
 │   │   ├── audit-log.sh       # PostToolUse: logs tool calls
 │   │   └── teardown.sh        # Stop: docker down + release lock
@@ -277,28 +283,35 @@ testing/
 └── summary/
     ├── findings.md            # Bugs and notable behavior (all agents write here)
     ├── latest-status.md       # Last result per agent
+    ├── sequencer.log          # Sequencer dispatch log
     ├── restarts.log           # Agent restart history
     └── health-check.log       # Watchdog output
 ```
 
-## Cron Schedules
+## Scheduling
 
-| Agent | Expression | Triggers |
-|-------|-----------|----------|
-| Smoketest | `0,10,20,30,40,50 * * * *` | :00, :10, :20, :30, :40, :50 |
-| Edge Case | `3,13,23,33,43,53 * * * *` | :03, :13, :23, :33, :43, :53 |
-| Chaos | `7,17,27,37,47,57 * * * *` | :07, :17, :27, :37, :47, :57 |
+The sequencer dispatches agents in a weighted rotation with a 5-minute minimum gap between slots:
 
-CronCreate jobs expire after 7 days. The `start.sh` script re-registers them on every start. The health-check watchdog restarts dead agents, which triggers re-registration.
+| Rotation | Weight | Slots per cycle |
+|----------|--------|----------------|
+| Smoketest | 2 | 2 of every 5 |
+| Edge Case | 2 | 2 of every 5 |
+| Chaos | 1 | 1 of every 5 |
+
+Full cycle: ~25 minutes (5 slots x 5 min). Actual throughput adapts — if a run takes longer than 5 min, the next dispatch waits for it to finish.
+
+Edit `shared/rotation.conf` to change the rotation, slot interval, or lock timeout. Changes take effect on the next cycle without any restarts.
+
+The health-check cron (`health-check.sh`, every 5 min) monitors the sequencer and all three agents, restarting any that have died.
 
 ## Troubleshooting
 
-### Agent not cycling
+### Agent not receiving dispatches
 
-1. Check if the tmux session is alive: `tmux has-session -t testing-<agent>`
-2. Attach and check for errors: `tmux attach -t testing-<agent>`
-3. Check if the lock is stuck: `cat /tmp/flare-extension-testing.lock`
-4. Check the audit log: `cat testing/agents/<agent>/results/audit.log`
+1. Check if the sequencer is alive: `tmux has-session -t testing-sequencer`
+2. Check the sequencer log for this agent: `grep <agent> testing/summary/sequencer.log | tail -5`
+3. Check if the agent's tmux session is alive: `tmux has-session -t testing-<agent>`
+4. Attach and check if the agent is idle or stuck: `tmux attach -t testing-<agent>`
 
 ### Lock stuck / agents all skipping
 
@@ -356,20 +369,14 @@ tar czf testing/results-archive-$(date +%Y%m%d).tar.gz testing/agents/*/results/
 rm testing/agents/*/results/2026-04-1[0-5]*.md  # delete old ones
 ```
 
-### CronCreate expired (after 7 days)
+### Changing the rotation weights
 
-Agents will stop cycling. Restart them:
+Edit `testing/shared/rotation.conf` and change the `ROTATION` line. The sequencer re-reads the config on each cycle, so changes take effect within one cycle without restarts.
 
-```bash
-bash testing/scripts/stop.sh
-bash testing/scripts/start.sh
-```
-
-Or manually re-register in each agent's tmux window:
-
-```
-/start-heartbeat
-```
+Example weights:
+- Equal (1:1:1): `ROTATION=smoketest,edgecase,chaos`
+- Heavy edge case (1:3:1): `ROTATION=smoketest,edgecase,edgecase,edgecase,chaos`
+- Smoketest only: `ROTATION=smoketest`
 
 ## Design Spec & Plan
 

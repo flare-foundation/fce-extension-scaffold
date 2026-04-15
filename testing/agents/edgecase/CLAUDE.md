@@ -18,9 +18,9 @@ Same as smoketest agent. Lock file: `/tmp/flare-extension-testing.lock`. Write `
 
 ## Heartbeat Behavior
 
-Every 10 minutes (offset +3 min), your `/heartbeat` skill fires. Each cycle:
+The centralized sequencer dispatches `/heartbeat` to you on a weighted rotation (you share time with the smoketest and chaos agents). Each cycle:
 
-1. Check and acquire the lock
+1. Acquire the lock
 2. Read `scenario-tracker.md` — find the next `[ ]` (untested) scenario
 3. Run the scenario using `/run-scenario`
 4. Update `scenario-tracker.md` with results (checkbox, date, result, error clarity, notes)

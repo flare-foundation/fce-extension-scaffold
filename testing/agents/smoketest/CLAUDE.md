@@ -10,27 +10,23 @@ All deployment scripts are at `$REPO_ROOT/scripts/`.
 
 ## Lock Protocol
 
-Before running any test scenario, you MUST acquire the lock:
+When the sequencer dispatches your `/heartbeat`, you MUST:
 
-1. Check if `/tmp/flare-extension-testing.lock` exists
-2. If it exists, read the contents (format: `agent-name|unix-timestamp`)
-   - If the lock is owned by another agent and is less than 10 minutes old, log "SKIPPED: locked by [agent]" to a result file and exit the cycle
-   - If the lock is more than 10 minutes old, it's stale — clear it, log a warning to `../../summary/findings.md`, and proceed
-3. Write `smoketest|$(date +%s)` to the lock file
-4. Run your test scenario
-5. ALWAYS tear down services before releasing the lock:
+1. Write `smoketest|$(date +%s)` to `/tmp/flare-extension-testing.lock`
+2. Run your test scenario
+3. ALWAYS tear down services before releasing the lock:
    ```bash
    cd $REPO_ROOT && docker compose down 2>/dev/null || true
    ```
-6. Remove the lock file
+4. Remove the lock file
 
 If ANY step fails or errors out, you MUST still tear down and release the lock.
 
 ## Heartbeat Behavior
 
-Every 10 minutes, your `/heartbeat` skill fires. Each cycle:
+The centralized sequencer dispatches `/heartbeat` to you on a weighted rotation (you share time with the edge case and chaos agents). Each cycle:
 
-1. Check and acquire the lock (see Lock Protocol)
+1. Acquire the lock (see Lock Protocol)
 2. Pick the next scenario from `../../shared/scenarios/smoketest-scenarios.md` (rotate sequentially)
 3. Run the scenario using the `/run-scenario` skill
 4. Write a result log to `results/YYYY-MM-DDTHH-MM-SS-scenario-name.md`
