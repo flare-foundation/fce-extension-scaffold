@@ -10,6 +10,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[stop]${NC} $*"; }
 
+# Set shutdown flag so health-check.sh doesn't restart anything
+touch /tmp/flare-testing-shutdown
+log "Shutdown flag set (health-check will not restart agents)"
+
 # Kill tmux sessions
 for session in testing-sequencer testing-smoketest testing-edgecase testing-chaos; do
   if tmux has-session -t "$session" 2>/dev/null; then

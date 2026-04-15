@@ -49,5 +49,7 @@ Update `../../summary/latest-status.md`. If anything interesting happened, appen
 
 ```bash
 cd worktree/extension-examples/orderbook && docker compose down 2>/dev/null || true
-rm -f /tmp/flare-extension-testing.lock
+# Only release the lock if we still own it
+LOCK_OWNER=$(cut -d'|' -f1 /tmp/flare-extension-testing.lock 2>/dev/null || echo "")
+[ "$LOCK_OWNER" = "chaos" ] && rm -f /tmp/flare-extension-testing.lock
 ```

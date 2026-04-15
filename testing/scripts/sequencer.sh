@@ -42,9 +42,13 @@ log "Resuming at index $INDEX"
 # --- Main loop ---
 while true; do
     # Re-read config each iteration (allows live changes)
-    source "$CONF"
-    IFS=',' read -ra AGENTS <<< "$ROTATION"
-    CYCLE_LEN=${#AGENTS[@]}
+    if _ROT=$(bash -c "source '$CONF' && echo \"\$ROTATION\"" 2>/dev/null) && [[ -n "$_ROT" ]]; then
+        source "$CONF"
+        IFS=',' read -ra AGENTS <<< "$ROTATION"
+        CYCLE_LEN=${#AGENTS[@]}
+    else
+        log "WARNING: Invalid config in $CONF, keeping previous rotation."
+    fi
 
     AGENT="${AGENTS[$((INDEX % CYCLE_LEN))]}"
     SLOT_NUM=$(( (INDEX % CYCLE_LEN) + 1 ))

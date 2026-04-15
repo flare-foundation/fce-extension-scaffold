@@ -10,6 +10,12 @@ HEALTH_LOG="$PROJECT_DIR/summary/health-check.log"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - health check" >> "$HEALTH_LOG"
 
+# Respect intentional shutdown — don't restart anything if stop.sh was run
+if [ -f /tmp/flare-testing-shutdown ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - shutdown flag present, skipping" >> "$HEALTH_LOG"
+  exit 0
+fi
+
 # Check if the sequencer is alive
 if ! tmux has-session -t "testing-sequencer" 2>/dev/null; then
   echo "$(date '+%Y-%m-%d %H:%M:%S') - sequencer session dead, restarting" >> "$RESTART_LOG"

@@ -25,6 +25,9 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[start]${NC} $*"; }
 die()  { echo -e "${RED}[start] ERROR:${NC} $*" >&2; exit 1; }
 
+# --- Clear shutdown flag (if stop.sh was run previously) ---
+rm -f /tmp/flare-testing-shutdown
+
 # --- Verify prerequisites ---
 command -v tmux >/dev/null 2>&1 || die "tmux is not installed"
 command -v claude >/dev/null 2>&1 || die "Claude Code CLI is not installed"

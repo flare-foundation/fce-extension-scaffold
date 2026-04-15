@@ -29,6 +29,15 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   tmux kill-session -t "$SESSION"
 fi
 
+# Clear the lock if it belongs to this dead agent
+LOCK_FILE="/tmp/flare-extension-testing.lock"
+if [ -f "$LOCK_FILE" ]; then
+  LOCK_HOLDER=$(cut -d'|' -f1 "$LOCK_FILE" 2>/dev/null || echo "")
+  if [ "$LOCK_HOLDER" = "$AGENT_NAME" ]; then
+    rm -f "$LOCK_FILE"
+  fi
+fi
+
 SESSION_FILE="$AGENT_DIR/.session-id"
 RESUME_FLAG=""
 if [ -f "$SESSION_FILE" ]; then

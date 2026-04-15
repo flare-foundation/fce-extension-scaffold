@@ -34,7 +34,9 @@ If anything unexpected happened (unclear error, surprising behavior, timing anom
 ```bash
 REPO_ROOT="$(cd ../../.. && pwd)"
 cd "$REPO_ROOT" && docker compose down 2>/dev/null || true
-rm -f /tmp/flare-extension-testing.lock
+# Only release the lock if we still own it
+LOCK_OWNER=$(cut -d'|' -f1 /tmp/flare-extension-testing.lock 2>/dev/null || echo "")
+[ "$LOCK_OWNER" = "smoketest" ] && rm -f /tmp/flare-extension-testing.lock
 ```
 
 Always do this, even if the scenario failed.

@@ -33,5 +33,7 @@ Use `/run-scenario` with the scenario ID (e.g., "D1-wrong-registry"). Read the s
 ```bash
 REPO_ROOT="$(cd ../../.. && pwd)"
 cd "$REPO_ROOT" && docker compose down 2>/dev/null || true
-rm -f /tmp/flare-extension-testing.lock
+# Only release the lock if we still own it
+LOCK_OWNER=$(cut -d'|' -f1 /tmp/flare-extension-testing.lock 2>/dev/null || echo "")
+[ "$LOCK_OWNER" = "edgecase" ] && rm -f /tmp/flare-extension-testing.lock
 ```
