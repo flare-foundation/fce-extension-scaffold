@@ -1,6 +1,6 @@
 redis_port = ":6382"
 
-private_key_variable = ""
+private_key_variable = "PROXY_PRIVATE_KEY"
 initial_signing_policy_offset = 0
 signing_policy_fetch_interval = "20s"
 
