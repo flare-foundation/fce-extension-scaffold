@@ -1,10 +1,12 @@
 package fccutils
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
 	"math/big"
+	"os"
 	"strings"
 	"extension-scaffold/tools/pkg/support"
 
@@ -20,37 +22,115 @@ import (
 	"time"
 )
 
-func RegisterNode(s *support.Support, teeInfo *types.SignedTeeInfoResponse, hostURL, ftdcTeeURL string, ftdcTee common.Address, command, instructionIDstring string) error {
+// registrationState tracks progress through the multi-step registration flow.
+// Saved to a state file after each step so registration can resume after failures.
+type registrationState struct {
+	CompletedSteps         string      `json:"completed_steps"`
+	TeeAttestInstructionID common.Hash `json:"tee_attest_instruction_id"`
+	InstructionID          common.Hash `json:"instruction_id"`
+}
+
+func loadState(path string) (*registrationState, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &registrationState{}, nil
+		}
+		return nil, errors.Errorf("failed to read state file: %s", err)
+	}
+	var state registrationState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, errors.Errorf("failed to parse state file: %s", err)
+	}
+	return &state, nil
+}
+
+func saveState(path string, state *registrationState) error {
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return errors.Errorf("failed to marshal state: %s", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return errors.Errorf("failed to write state file: %s", err)
+	}
+	return nil
+}
+
+func RegisterNode(s *support.Support, teeInfo *types.SignedTeeInfoResponse, hostURL, ftdcTeeURL string, ftdcTee common.Address, command, instructionIDstring, stateFilePath string) error {
 	teeID, proxyID, err := TeeProxyId(teeInfo)
 	if err != nil {
 		return err
 	}
 
+	// Load existing state for resume support
+	state, err := loadState(stateFilePath)
+	if err != nil {
+		return err
+	}
+	if state.CompletedSteps != "" {
+		logger.Infof("Resuming registration from state file (completed: %s)", state.CompletedSteps)
+	}
+
 	var teeAttestInstructionID common.Hash
 	if strings.Contains(command, "r") {
-		_, teeAttestInstructionID, err = PreRegistration(s, hostURL, teeID, proxyID, teeInfo)
-		if err != nil {
-			return err
+		if strings.Contains(state.CompletedSteps, "r") {
+			logger.Infof("Pre-registration already completed, skipping (from state file)")
+			teeAttestInstructionID = state.TeeAttestInstructionID
+		} else {
+			// Check if machine is already registered on-chain
+			callOpts := &bind.CallOpts{Context: context.Background()}
+			machineInfo, machineErr := s.TeeMachineRegistry.GetTeeMachine(callOpts, teeID)
+			if machineErr == nil && machineInfo.TeeId != (common.Address{}) {
+				logger.Infof("TEE machine %s already registered on-chain, skipping pre-registration", teeID.Hex())
+			} else {
+				_, teeAttestInstructionID, err = PreRegistration(s, hostURL, teeID, proxyID, teeInfo)
+				if err != nil {
+					return err
+				}
+			}
+			state.CompletedSteps += "r"
+			state.TeeAttestInstructionID = teeAttestInstructionID
+			if saveErr := saveState(stateFilePath, state); saveErr != nil {
+				logger.Warnf("WARNING: failed to save state: %v", saveErr)
+			}
 		}
-
 		time.Sleep(1 * time.Second)
 	}
-	if strings.Contains(command, "R") {
-		teeAttestInstructionID, err = RequestTeeAttestation(s, teeID)
-		if err != nil {
-			return err
-		}
 
+	if strings.Contains(command, "R") {
+		if strings.Contains(state.CompletedSteps, "R") {
+			logger.Infof("TEE attestation request already completed, skipping (from state file)")
+			teeAttestInstructionID = state.TeeAttestInstructionID
+		} else {
+			teeAttestInstructionID, err = RequestTeeAttestation(s, teeID)
+			if err != nil {
+				return err
+			}
+			state.CompletedSteps += "R"
+			state.TeeAttestInstructionID = teeAttestInstructionID
+			if saveErr := saveState(stateFilePath, state); saveErr != nil {
+				logger.Warnf("WARNING: failed to save state: %v", saveErr)
+			}
+		}
 		time.Sleep(1 * time.Second)
 	}
 
 	var instructionID common.Hash
 	if strings.Contains(command, "a") {
-		instructionID, err = RequestFTDCAvailabilityCheck(s, teeID, ftdcTee, teeAttestInstructionID)
-		if err != nil {
-			return err
+		if strings.Contains(state.CompletedSteps, "a") {
+			logger.Infof("FTDC availability check already completed, skipping (from state file)")
+			instructionID = state.InstructionID
+		} else {
+			instructionID, err = RequestFTDCAvailabilityCheck(s, teeID, ftdcTee, teeAttestInstructionID)
+			if err != nil {
+				return err
+			}
+			state.CompletedSteps += "a"
+			state.InstructionID = instructionID
+			if saveErr := saveState(stateFilePath, state); saveErr != nil {
+				logger.Warnf("WARNING: failed to save state: %v", saveErr)
+			}
 		}
-
 		time.Sleep(1 * time.Second)
 	} else {
 		instructionID = common.HexToHash(instructionIDstring)
@@ -68,6 +148,8 @@ func RegisterNode(s *support.Support, teeInfo *types.SignedTeeInfoResponse, host
 		}
 	}
 
+	// All steps completed — delete state file
+	os.Remove(stateFilePath)
 	return nil
 }
 

@@ -62,14 +62,14 @@ A working Hello World example for building Flare Confidential Compute (FCC) exte
 |----------|---------|-------------|
 | `ADDRESSES_FILE` | auto-detected | Path to `deployed-addresses.json` |
 | `CHAIN_URL` | `http://127.0.0.1:8545` | Chain RPC endpoint |
-| `PRIV_KEY` | Hardhat dev key | Funded private key for transactions |
-| `PRIVATE_KEY` | Hardhat dev key | Proxy signing key (used by start-services) |
+| `DEPLOYMENT_PRIVATE_KEY` | Hardhat dev key | Funded private key for transactions |
+| `PROXY_PRIVATE_KEY` | Hardhat dev key | Proxy signing key (used by start-services) |
 | `EXTENSION_ID` | from `config/extension.env` | Extension ID (bytes32 hex, set by pre-build) |
-| `INITIAL_OWNER` | derived from `PRIV_KEY` | Initial contract owner address |
+| `INITIAL_OWNER` | derived from `DEPLOYMENT_PRIVATE_KEY` | Initial contract owner address |
 | `EXT_PROXY_URL` | `http://localhost:6674` | Extension proxy URL (post-build, test) |
 | `NORMAL_PROXY_URL` | `http://localhost:6662` | Normal/FTDC proxy URL (post-build) |
 | `TYPES_SERVER_PORT` | `8100` | Types server HTTP port |
-| `EXTENSION_OWNER_KEY` | (empty, falls back to `PRIV_KEY`) | Private key override for AddTeeVersion |
+| `EXTENSION_OWNER_KEY` | (empty, falls back to `DEPLOYMENT_PRIVATE_KEY`) | Private key override for AddTeeVersion |
 | `TEE_VERSION` | `v0.1.0` | Version string for TEE registration |
 | `LOCAL_MODE` | `true` | Skip attestation in local dev |
 | `WAIT_TIMEOUT` | `120` | Service wait timeout in seconds |
@@ -279,6 +279,20 @@ Or run everything (pre-build + post-build + test) in one shot:
 ./scripts/full-setup.sh --test
 ```
 
+### Unit and integration tests
+
+The tooling includes unit tests (no chain required) and integration tests (run against any EVM chain):
+
+```bash
+# Unit tests — always safe to run
+cd tools && go test ./...
+
+# Integration tests — requires a running chain node
+cd tools && go test -tags integration ./integration/ -v -count=1
+```
+
+See the [Testing Guide](docs/testing.md) for details on what each layer covers and how to configure the integration tests for local or Coston2.
+
 ## Deploying to Coston2
 
 Coston2 is Flare's public testnet. Unlike local dev (which runs against a Hardhat node with pre-deployed contracts), Coston2 deployment connects to the live testnet RPC, uses real signing policies, and requires a publicly accessible proxy URL.
@@ -301,9 +315,9 @@ Key values to set:
 
 | Variable | Value | Notes |
 |----------|-------|-------|
-| `PRIV_KEY` | Your funded Coston2 private key | Used for contract deployments and on-chain calls |
-| `INITIAL_OWNER` | Address derived from `PRIV_KEY` | Owner of deployed contracts |
-| `PRIVATE_KEY` | Same or different funded key | Used by the proxy for signing |
+| `DEPLOYMENT_PRIVATE_KEY` | Your funded Coston2 private key | Used for contract deployments and on-chain calls |
+| `INITIAL_OWNER` | Address derived from `DEPLOYMENT_PRIVATE_KEY` | Owner of deployed contracts |
+| `PROXY_PRIVATE_KEY` | Same or different funded key | Used by the proxy for signing |
 | `CHAIN_URL` | `https://coston2-api.flare.network/ext/C/rpc` | Coston2 RPC endpoint |
 | `ADDRESSES_FILE` | `./config/coston2/deployed-addresses.json` | Pre-populated with Coston2 contract addresses |
 | `LOCAL_MODE` | `false` | **Must be `false`** on live networks (enables attestation) |

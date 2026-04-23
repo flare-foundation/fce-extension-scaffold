@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ../../shared/hooks/audit-log.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "AGENT_NAME=smoketest bash ../../shared/hooks/teardown.sh",
+            "timeout": 15000
+          }
+        ]
+      }
+    ]
+  }
+}

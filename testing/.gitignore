@@ -1,0 +1,18 @@
+# Runtime files
+agents/*/results/audit.log
+agents/chaos/worktree/
+*.lock
+
+# Session files
+agents/*/.session-id
+
+# Deployment scripts with project-specific config (not for public repo)
+scripts/launch-gcp.sh
+scripts/stop-gcp.sh
+
+# Test result artifacts (tracked only on the testing-results branch)
+agents/*/results/
+agents/*/scenario-tracker.md
+summary/
+testing-analysis-report.md
+comprehensive-analysis-*.md

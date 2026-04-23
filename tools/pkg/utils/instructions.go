@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"math/big"
+	"time"
 
 	"extension-scaffold/tools/pkg/contracts/helloworld"
 	"extension-scaffold/tools/pkg/fccutils"
@@ -28,9 +29,11 @@ func DeployInstructionSender(s *support.Support) (common.Address, *helloworld.He
 		return common.Address{}, nil, errors.Errorf("failed to deploy contract: %s", err)
 	}
 
-	receipt, err := bind.WaitMined(context.Background(), s.ChainClient, tx)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	receipt, err := bind.WaitMined(ctx, s.ChainClient, tx)
 	if err != nil {
-		return common.Address{}, nil, errors.Errorf("failed waiting for deployment: %s", err)
+		return common.Address{}, nil, errors.Errorf("deployment tx not mined within 2 minutes (tx: %s): %s", tx.Hash().Hex(), err)
 	}
 
 	if receipt.Status != types.ReceiptStatusSuccessful {
@@ -107,7 +110,7 @@ func SendSayHello(s *support.Support, instructionSenderAddress common.Address, m
 	if err != nil {
 		return common.Hash{}, common.Hash{}, errors.Errorf("failed to create transactor: %s", err)
 	}
-	opts.Value = big.NewInt(1000000)
+	opts.Value = big.NewInt(1000000) // Instruction fee in wei — must match registry's required fee
 
 	tx, err := sender.SendSayHello(opts, message)
 	if err != nil {
@@ -176,7 +179,7 @@ func SendSayGoodbye(s *support.Support, instructionSenderAddress common.Address,
 	if err != nil {
 		return common.Hash{}, common.Hash{}, errors.Errorf("failed to create transactor: %s", err)
 	}
-	opts.Value = big.NewInt(1000000)
+	opts.Value = big.NewInt(1000000) // Instruction fee in wei — must match registry's required fee
 
 	tx, err := sender.SendSayGoodbye(opts, name, reason)
 	if err != nil {

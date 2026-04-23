@@ -33,6 +33,14 @@ echo -e "${CYAN}║  Phase 1: Pre-build                  ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
 "$SCRIPT_DIR/pre-build.sh" || die "Pre-build failed"
 
+# --- Phase 1.5: Extension setup (optional hook for extension-specific config) ---
+if [[ -x "$SCRIPT_DIR/extension-setup.sh" ]]; then
+    echo -e "\n${CYAN}╔══════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║  Phase 1.5: Extension setup          ║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
+    "$SCRIPT_DIR/extension-setup.sh" || die "Extension setup failed"
+fi
+
 # --- Phase 2: Start services (TEE node + proxy) ---
 echo -e "\n${CYAN}╔══════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║  Phase 2: Start services             ║${NC}"
@@ -48,6 +56,14 @@ echo -e "\n${CYAN}╔═══════════════════�
 echo -e "${CYAN}║  Phase 3: Post-build                 ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
 "$SCRIPT_DIR/post-build.sh" || die "Post-build failed"
+
+# --- Phase 3.5: Extension post-setup (optional hook for post-registration config) ---
+if [[ -x "$SCRIPT_DIR/extension-post-setup.sh" ]]; then
+    echo -e "\n${CYAN}╔══════════════════════════════════════╗${NC}"
+    echo -e "${CYAN}║  Phase 3.5: Extension post-setup     ║${NC}"
+    echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
+    "$SCRIPT_DIR/extension-post-setup.sh" || die "Extension post-setup failed"
+fi
 
 # --- Phase 4: Test (optional) ---
 if [[ "$RUN_TESTS" == "true" ]]; then

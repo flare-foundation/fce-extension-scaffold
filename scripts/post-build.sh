@@ -122,6 +122,10 @@ go run ./cmd/allow-tee-version \
     -version "$TEE_VERSION" \
     || die "Allow TEE version failed"
 
+# Export SIMULATED_TEE for register-tee (controls attestation mode)
+export SIMULATED_TEE="${SIMULATED_TEE:-true}"
+log "Simulated TEE: $SIMULATED_TEE"
+
 # --- Step 2: Register TEE on-chain ---
 step 2 "Register TEE machine"
 go run ./cmd/register-tee \
@@ -130,7 +134,7 @@ go run ./cmd/register-tee \
     -p "$EXT_PROXY_URL" \
     -h "${EXT_PROXY_HOST_URL:-$EXT_PROXY_URL}" \
     -ep "$NORMAL_PROXY_URL" \
-    -l \
+    -state "$PROJECT_DIR/config/register-tee.state" \
     || die "Register TEE failed"
 
 echo ""

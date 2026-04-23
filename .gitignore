@@ -4,6 +4,7 @@
 # Coston2 proxy configs (contain DB credentials)
 config/proxy/extension_proxy.coston2.toml
 config/proxy/extension_proxy.coston2.docker.toml
+config/extension.env
 out/
 cache/
 .DS_Store
@@ -19,3 +20,12 @@ tools/run-*
 tools/pkg/contracts/*/autogen.go
 tools/pkg/contracts/*/*.abi
 tools/pkg/contracts/*/*.bin
+
+docs/superpowers
+
+notes/
+
+# Private deployment guide (SSH, redeploy instructions)
+DEPLOYMENT.md
+
+config/**/*.log

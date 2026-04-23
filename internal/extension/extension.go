@@ -72,7 +72,10 @@ func (e *Extension) processAction(action teetypes.Action) (int, []byte) {
 		return e.processGreeting(action, dataFixed)
 
 	default:
-		return http.StatusNotImplemented, []byte("unsupported op type")
+		return http.StatusNotImplemented, []byte(fmt.Sprintf(
+			"unsupported op type: received %s, expected %s (%s)",
+			dataFixed.OPType.Hex(), teeutils.ToHash(config.OPTypeGreeting).Hex(), config.OPTypeGreeting,
+		))
 	}
 }
 
@@ -90,7 +93,12 @@ func (e *Extension) processGreeting(action teetypes.Action, df *instruction.Data
 		return http.StatusOK, b
 
 	default:
-		return http.StatusNotImplemented, []byte("unsupported op command")
+		return http.StatusNotImplemented, []byte(fmt.Sprintf(
+			"unsupported op command: received %s, expected one of [%s (%s), %s (%s)]",
+			df.OPCommand.Hex(),
+			teeutils.ToHash(config.OPCommandSayHello).Hex(), config.OPCommandSayHello,
+			teeutils.ToHash(config.OPCommandSayGoodbye).Hex(), config.OPCommandSayGoodbye,
+		))
 	}
 }
 

@@ -12,12 +12,15 @@ import { ITeeMachineRegistry } from "./interfaces/ITeeMachineRegistry.sol";
 /// DO NOT MODIFY: constructor, setExtensionId(), _getExtensionId()
 contract HelloWorldInstructionSender {
     /// @notice Operation type for greeting actions (SAY_HELLO, SAY_GOODBYE).
+    // forge-lint: disable-next-line(unsafe-typecast)
     bytes32 public constant OP_TYPE_GREETING = bytes32("GREETING");
 
     /// @notice Command for the SAY_HELLO action.
+    // forge-lint: disable-next-line(unsafe-typecast)
     bytes32 public constant OP_COMMAND_SAY_HELLO = bytes32("SAY_HELLO");
 
     /// @notice Command for the SAY_GOODBYE action.
+    // forge-lint: disable-next-line(unsafe-typecast)
     bytes32 public constant OP_COMMAND_SAY_GOODBYE = bytes32("SAY_GOODBYE");
 
     /// @notice Reference to the TEE extension registry contract.
@@ -40,6 +43,10 @@ contract HelloWorldInstructionSender {
         ITeeExtensionRegistry _teeExtensionRegistry,
         ITeeMachineRegistry _teeMachineRegistry
     ) {
+        require(address(_teeExtensionRegistry) != address(0), "TeeExtensionRegistry cannot be zero address");
+        require(address(_teeMachineRegistry) != address(0), "TeeMachineRegistry cannot be zero address");
+        require(address(_teeExtensionRegistry).code.length > 0, "TeeExtensionRegistry has no code");
+        require(address(_teeMachineRegistry).code.length > 0, "TeeMachineRegistry has no code");
         TEE_EXTENSION_REGISTRY = _teeExtensionRegistry;
         TEE_MACHINE_REGISTRY = _teeMachineRegistry;
     }
@@ -91,7 +98,7 @@ contract HelloWorldInstructionSender {
         ITeeExtensionRegistry.TeeInstructionParams memory params = ITeeExtensionRegistry.TeeInstructionParams({
             opType: OP_TYPE_GREETING,
             opCommand: OP_COMMAND_SAY_GOODBYE,
-            message: abi.encode(SayGoodbyeMessage(_name, _reason)),
+            message: abi.encode(SayGoodbyeMessage({name: _name, reason: _reason})),
             cosigners: cosigners,
             cosignersThreshold: 0,
             claimBackAddress: msg.sender

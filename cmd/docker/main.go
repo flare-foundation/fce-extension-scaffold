@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
 	teeServer "github.com/flare-foundation/tee-node/pkg/server"
@@ -28,16 +29,28 @@ func main() {
 	// Start tee-node in extension mode.
 	go teeServer.StartServerExtension(configPort, signPort, extensionPort)
 
-	// Start extension server.
-	extserver.StartExtension(extensionPort, signPort)
+	// Start extension server — fail fast if port binding fails.
+	extErrCh := extserver.StartExtension(extensionPort, signPort)
+
+	// Give server a moment to bind, then check for early failures.
+	time.Sleep(100 * time.Millisecond)
+	select {
+	case err := <-extErrCh:
+		logger.Fatalf("extension server failed to start: %v", err)
+	default:
+	}
 
 	logger.Infof("extension TEE running (config=%d, sign=%d, ext=%d)", configPort, signPort, extensionPort)
 
-	// Wait for signal.
+	// Wait for signal or server error.
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	<-sigChan
-	logger.Info("shutting down")
+	select {
+	case <-sigChan:
+		logger.Info("shutting down")
+	case err := <-extErrCh:
+		logger.Fatalf("extension server error: %v", err)
+	}
 }
 
 func intEnv(key string, fallback int) int {

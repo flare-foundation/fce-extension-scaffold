@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"strings"
 	"time"
 
 	"extension-scaffold/tools/pkg/configs"
@@ -39,11 +40,17 @@ func main() {
 		fccutils.FatalWithCause(err)
 	}
 
-	// --- Generic: configure contract (do not modify) --------------------------
+	// --- Generic: configure contract -----------------------------------------
 	logger.Infof("Setting extension ID on instruction sender...")
 	err = instrutils.SetExtensionId(testSupport, instructionSenderAddress)
 	if err != nil {
-		logger.Warnf("setExtensionId failed (may already be set): %s", err)
+		if strings.Contains(err.Error(), "already set") || strings.Contains(err.Error(), "Extension ID already set") {
+			logger.Infof("Extension ID already set on contract, continuing")
+		} else {
+			logger.Errorf("setExtensionId failed: %s", err)
+			fccutils.FatalWithCause(errors.Errorf(
+				"setExtensionId failed — is the extension registered? Check that pre-build.sh completed successfully. Error: %s", err))
+		}
 	}
 
 	// --- Test case 1: Send a SAY_HELLO instruction ---

@@ -22,48 +22,73 @@ func SetupExtension(
 	governanceHash common.Hash,
 	instructionsSenderAddress, stateVerifierAddress common.Address,
 ) (*big.Int, error) {
+	callOpts := &bind.CallOpts{
+		From:    crypto.PubkeyToAddress(s.Prv.PublicKey),
+		Context: context.Background(),
+	}
+	deployerAddr := crypto.PubkeyToAddress(s.Prv.PublicKey)
+
 	opts, err := bind.NewKeyedTransactorWithChainID(s.Prv, s.ChainID)
 	if err != nil {
 		return nil, err
 	}
-	// Register the extension
+
+	// Step 1: Register the extension
 	extRegistered, _, err := registerExtension(s, opts, instructionsSenderAddress, stateVerifierAddress)
 	if err != nil {
 		return nil, err
 	}
 	extensionID := extRegistered.ExtensionId
-
 	logger.Infof("Extension registered with ID: %s", extensionID.String())
 
-	// Allow TEE machine owners and wallet project managers for this extension
-	ownersAdded, err := allowTeeMachineOwners(s, opts, extensionID, []common.Address{crypto.PubkeyToAddress(s.Prv.PublicKey)})
+	// Step 2: Allow TEE machine owners for this extension
+	alreadyMachineOwner, err := s.TeeOwnerAllowlist.IsAllowedTeeMachineOwner(callOpts, extensionID, deployerAddr)
 	if err != nil {
-		return nil, err
+		return nil, errors.Errorf("failed checking TEE machine owner status: %s", err)
 	}
-	_, err = allowTeeProjectManagerOwners(s, opts, extensionID, []common.Address{crypto.PubkeyToAddress(s.Prv.PublicKey)})
-	if err != nil {
-		return nil, err
+	if alreadyMachineOwner {
+		logger.Infof("Deployer already allowed as TEE machine owner for extension %s, skipping", extensionID.String())
+	} else {
+		_, err = allowTeeMachineOwners(s, opts, extensionID, []common.Address{deployerAddr})
+		if err != nil {
+			return nil, errors.Errorf("failed adding TEE machine owners (extension exists as ID %s but owners not set): %s", extensionID.String(), err)
+		}
+		logger.Infof("TEE machine owners allowed for extension %s", extensionID.String())
 	}
 
-	logger.Infof("TEE machine owners and wallet project managers allowed: %s", ownersAdded.Owners)
+	// Step 3: Allow wallet project owners for this extension
+	alreadyProjectOwner, err := s.TeeOwnerAllowlist.IsAllowedTeeWalletProjectOwner(callOpts, extensionID, deployerAddr)
+	if err != nil {
+		return nil, errors.Errorf("failed checking wallet project owner status: %s", err)
+	}
+	if alreadyProjectOwner {
+		logger.Infof("Deployer already allowed as wallet project owner for extension %s, skipping", extensionID.String())
+	} else {
+		_, err = allowTeeProjectManagerOwners(s, opts, extensionID, []common.Address{deployerAddr})
+		if err != nil {
+			return nil, errors.Errorf("failed adding wallet project owners (extension exists as ID %s but owners not set): %s", extensionID.String(), err)
+		}
+		logger.Infof("Wallet project owners allowed for extension %s", extensionID.String())
+	}
 
-	// Allow an EVM type of keys on the extension
+	// Step 4: Allow an EVM type of keys on the extension
 	isKeyTypeSupported, err := IsKeyTypeSupported(s, extensionID, wallets.EVMType)
 	if err != nil {
 		return nil, err
 	}
 	if isKeyTypeSupported {
-		return nil, errors.New("key already supported")
-	}
-
-	logger.Infof("Adding key type %s to extension %s", wallets.EVMType, extensionID)
-	err = AddSupportedKeyTypes(s, extensionID, []common.Hash{wallets.EVMType})
-	if err != nil {
-		return nil, err
+		logger.Infof("Key type %s already supported for extension %s, skipping", wallets.EVMType, extensionID.String())
+	} else {
+		logger.Infof("Adding key type %s to extension %s", wallets.EVMType, extensionID)
+		err = AddSupportedKeyTypes(s, extensionID, []common.Hash{wallets.EVMType})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return extensionID, nil
 }
+
 
 func AddSupportedKeyTypes(s *support.Support, extensionId *big.Int, keyTypes []common.Hash) error {
 	opts, err := bind.NewKeyedTransactorWithChainID(s.Prv, s.ChainID)
@@ -105,19 +130,31 @@ func registerExtension(
 		return nil, nil, errors.Errorf("TeeExtensionRegistry.Register failed: %s", err)
 	}
 
-	receipt, err := bind.WaitMined(context.Background(), s.ChainClient, tx)
+	receipt, err := support.CheckTx(tx, s.ChainClient)
 	if err != nil {
-		return nil, nil, errors.Errorf("%s", err)
+		return nil, nil, errors.Errorf("Register transaction failed: %s", err)
+	}
+
+	if len(receipt.Logs) < 2 {
+		return nil, nil, errors.Errorf(
+			"expected at least 2 logs from Register() transaction, got %d — "+
+				"the registry contract may have changed or be behind a proxy",
+			len(receipt.Logs),
+		)
 	}
 
 	extensionRegistered, err := s.TeeExtensionRegistry.ParseTeeExtensionRegistered(*receipt.Logs[0])
-	if err != nil || receipt.Status != 1 {
-		return nil, nil, errors.Errorf("error %s, or receipt status not 1", err)
+	if err != nil {
+		return nil, nil, errors.Errorf("failed to parse TeeExtensionRegistered event: %s", err)
+	}
+
+	if extensionRegistered.ExtensionId == nil || extensionRegistered.ExtensionId.Sign() == 0 {
+		logger.Warnf("WARNING: extension ID is 0 — this may cause issues with setExtensionId() sentinel logic")
 	}
 
 	extensionContractsSet, err := s.TeeExtensionRegistry.ParseTeeExtensionContractsSet(*receipt.Logs[1])
-	if err != nil || receipt.Status != 1 {
-		return nil, nil, errors.Errorf("error %s, or receipt status not 1", err)
+	if err != nil {
+		return nil, nil, errors.Errorf("failed to parse TeeExtensionContractsSet event: %s", err)
 	}
 
 	return extensionRegistered, extensionContractsSet, nil
@@ -126,17 +163,21 @@ func registerExtension(
 func allowTeeMachineOwners(s *support.Support, opts *bind.TransactOpts, extensionId *big.Int, owners []common.Address) (*teeownerallowlist.TeeOwnerAllowlistAllowedTeeMachineOwnersAdded, error) {
 	tx, err := s.TeeOwnerAllowlist.AddAllowedTeeMachineOwners(opts, extensionId, owners)
 	if err != nil {
-		return nil, errors.Errorf("%s", err)
+		return nil, errors.Errorf("AddAllowedTeeMachineOwners failed: %s", err)
 	}
 
-	receipt, err := bind.WaitMined(context.Background(), s.ChainClient, tx)
+	receipt, err := support.CheckTx(tx, s.ChainClient)
 	if err != nil {
-		return nil, errors.Errorf("%s", err)
+		return nil, errors.Errorf("AddAllowedTeeMachineOwners transaction failed: %s", err)
+	}
+
+	if len(receipt.Logs) == 0 {
+		return nil, errors.New("no logs in AddAllowedTeeMachineOwners transaction — unexpected")
 	}
 
 	ownersAdded, err := s.TeeOwnerAllowlist.ParseAllowedTeeMachineOwnersAdded(*receipt.Logs[0])
-	if err != nil || receipt.Status != 1 {
-		return nil, errors.Errorf("error %s, or receipt status not 1", err)
+	if err != nil {
+		return nil, errors.Errorf("failed to parse AllowedTeeMachineOwnersAdded event: %s", err)
 	}
 
 	return ownersAdded, nil
@@ -145,17 +186,21 @@ func allowTeeMachineOwners(s *support.Support, opts *bind.TransactOpts, extensio
 func allowTeeProjectManagerOwners(s *support.Support, opts *bind.TransactOpts, extensionId *big.Int, owners []common.Address) (*teeownerallowlist.TeeOwnerAllowlistAllowedTeeWalletProjectOwnersAdded, error) {
 	tx, err := s.TeeOwnerAllowlist.AddAllowedTeeWalletProjectOwners(opts, extensionId, owners)
 	if err != nil {
-		return nil, errors.Errorf("%s", err)
+		return nil, errors.Errorf("AddAllowedTeeWalletProjectOwners failed: %s", err)
 	}
 
-	receipt, err := bind.WaitMined(context.Background(), s.ChainClient, tx)
+	receipt, err := support.CheckTx(tx, s.ChainClient)
 	if err != nil {
-		return nil, errors.Errorf("%s", err)
+		return nil, errors.Errorf("AddAllowedTeeWalletProjectOwners transaction failed: %s", err)
+	}
+
+	if len(receipt.Logs) == 0 {
+		return nil, errors.New("no logs in AddAllowedTeeWalletProjectOwners transaction — unexpected")
 	}
 
 	ownersAdded, err := s.TeeOwnerAllowlist.ParseAllowedTeeWalletProjectOwnersAdded(*receipt.Logs[0])
-	if err != nil || receipt.Status != 1 {
-		return nil, errors.Errorf("error %s, or receipt status not 1", err)
+	if err != nil {
+		return nil, errors.Errorf("failed to parse AllowedTeeWalletProjectOwnersAdded event: %s", err)
 	}
 
 	return ownersAdded, nil

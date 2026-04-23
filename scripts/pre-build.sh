@@ -4,10 +4,11 @@
 # Inputs (env vars):
 #   ADDRESSES_FILE  — path to deployed-addresses.json (auto-detected if unset)
 #   CHAIN_URL       — chain RPC URL (default: http://127.0.0.1:8545)
-#   PRIV_KEY        — funded private key (default: Hardhat account)
+#   DEPLOYMENT_PRIVATE_KEY — funded private key (default: Hardhat account)
 #
 # Outputs:
 #   config/extension.env — EXTENSION_ID and INSTRUCTION_SENDER
+#   config/deploy.log    — stderr from Go deploy commands
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -32,6 +33,7 @@ if [[ -n "$ADDRESSES_FILE" && "$ADDRESSES_FILE" != /* ]]; then
 fi
 CHAIN_URL="${CHAIN_URL:-http://127.0.0.1:8545}"
 CONFIG_OUTPUT="$PROJECT_DIR/config/extension.env"
+LOG_FILE="$PROJECT_DIR/config/deploy.log"
 
 # Auto-detect addresses file
 if [[ -z "$ADDRESSES_FILE" ]]; then
@@ -69,6 +71,13 @@ ADDRESSES_FILE="$(cd "$(dirname "$ADDRESSES_FILE")" && pwd)/$(basename "$ADDRESS
 log "Chain URL:      $CHAIN_URL"
 log "Addresses file: $ADDRESSES_FILE"
 
+# --- Step 0: Pre-flight check ---
+step 0 "Pre-flight check"
+cd "$PROJECT_DIR/tools"
+if ! go run ./cmd/deploy-contract -a "$ADDRESSES_FILE" -c "$CHAIN_URL" --preflight-only 2>&1; then
+    die "Pre-flight check failed — fix the issues above before deploying"
+fi
+
 # --- Step 1: Generate Go bindings from Solidity contract ---
 step 1 "Generate Go bindings"
 "$SCRIPT_DIR/generate-bindings.sh" || die "Binding generation failed"
@@ -76,12 +85,37 @@ step 1 "Generate Go bindings"
 # --- Step 2: Deploy InstructionSender ---
 step 2 "Deploy InstructionSender contract"
 cd "$PROJECT_DIR/tools"
-INSTRUCTION_SENDER=$(go run ./cmd/deploy-contract -a "$ADDRESSES_FILE" -c "$CHAIN_URL" 2>/dev/null | tail -1) || die "Deploy failed"
+: > "$LOG_FILE"  # truncate log file
+INSTRUCTION_SENDER=$(go run ./cmd/deploy-contract -a "$ADDRESSES_FILE" -c "$CHAIN_URL" 2>"$LOG_FILE" | tail -1) || {
+    echo -e "${RED}Deploy failed. Logs:${NC}" >&2
+    cat "$LOG_FILE" >&2
+    die "Deploy failed — see output above"
+}
+
+# Validate captured address
+[[ "$INSTRUCTION_SENDER" =~ ^0x[0-9a-fA-F]{40}$ ]] || {
+    echo -e "${RED}deploy-contract output was not a valid address. Logs:${NC}" >&2
+    cat "$LOG_FILE" >&2
+    die "deploy-contract returned invalid address: '$INSTRUCTION_SENDER' (expected 0x + 40 hex chars)"
+}
+
 log "InstructionSender deployed at: $INSTRUCTION_SENDER"
 
 # --- Step 3: Register extension ---
 step 3 "Register extension on-chain"
-EXTENSION_ID=$(go run ./cmd/register-extension -a "$ADDRESSES_FILE" -c "$CHAIN_URL" --instructionSender "$INSTRUCTION_SENDER" 2>/dev/null | tail -1) || die "Registration failed"
+EXTENSION_ID=$(go run ./cmd/register-extension -a "$ADDRESSES_FILE" -c "$CHAIN_URL" --instructionSender "$INSTRUCTION_SENDER" 2>>"$LOG_FILE" | tail -1) || {
+    echo -e "${RED}Registration failed. Logs:${NC}" >&2
+    cat "$LOG_FILE" >&2
+    die "Registration failed — see output above"
+}
+
+# Validate captured extension ID
+[[ "$EXTENSION_ID" =~ ^0x[0-9a-fA-F]{64}$ ]] || {
+    echo -e "${RED}register-extension output was not a valid ID. Logs:${NC}" >&2
+    cat "$LOG_FILE" >&2
+    die "register-extension returned invalid ID: '$EXTENSION_ID' (expected 0x + 64 hex chars)"
+}
+
 log "Extension ID: $EXTENSION_ID"
 
 # --- Step 4: Write config ---
@@ -100,3 +134,4 @@ echo -e "${GREEN}========================================${NC}"
 echo "  EXTENSION_ID         $EXTENSION_ID"
 echo "  INSTRUCTION_SENDER   $INSTRUCTION_SENDER"
 echo "  Config file          $CONFIG_OUTPUT"
+echo "  Deploy log           $LOG_FILE"

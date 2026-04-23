@@ -6,6 +6,7 @@ import (
 	"extension-scaffold/tools/pkg/fccutils"
 	"extension-scaffold/tools/pkg/support"
 	"flag"
+	"os"
 
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
 )
@@ -16,11 +17,19 @@ func main() {
 	pf := flag.String("p", configs.ExtensionProxyURL, "extension proxy url (used to query TEE info)")
 	hf := flag.String("h", "", "host url to register on-chain (defaults to -p if not set)")
 	epf := flag.String("ep", "http://localhost:6662", "external proxy url (for FTDC)")
-	lf := flag.Bool("l", false, "local")
 	instructionF := flag.String("i", "", "instructionID")
 	command := flag.String("command", "rap", "command (rap)")
+	stateFile := flag.String("state", "../config/register-tee.state", "state file for resume support")
+	resume := flag.Bool("resume", false, "resume from state file (default: start fresh)")
 
 	flag.Parse()
+
+	// Default: start fresh. Only resume if --resume is explicitly passed.
+	if !*resume {
+		if err := os.Remove(*stateFile); err != nil && !os.IsNotExist(err) {
+			logger.Warnf("WARNING: failed to remove stale state file: %v", err)
+		}
+	}
 
 	testSupport, err := support.DefaultSupport(*af, *cf)
 	if err != nil {
@@ -44,7 +53,7 @@ func main() {
 	}
 
 	// to check if things are ok
-	_, _, err = fccutils.GetCodeHashAndPlatform(teeInfo, *lf)
+	_, _, err = fccutils.GetCodeHashAndPlatform(teeInfo)
 	if err != nil {
 		fccutils.FatalWithCause(err)
 	}
@@ -55,7 +64,7 @@ func main() {
 	}
 
 	logger.Infof("Registration of TEE with ID %s", hex.EncodeToString(teeID[:]))
-	err = fccutils.RegisterNode(testSupport, teeInfo, hostURL, *epf, ftdcTeeID, *command, *instructionF)
+	err = fccutils.RegisterNode(testSupport, teeInfo, hostURL, *epf, ftdcTeeID, *command, *instructionF, *stateFile)
 	if err != nil {
 		fccutils.FatalWithCause(err)
 	}

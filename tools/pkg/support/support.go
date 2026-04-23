@@ -3,15 +3,19 @@ package support
 import (
 	"context"
 	"crypto/ecdsa"
+	"encoding/hex"
 	"encoding/json"
+	stderrors "errors"
 	"extension-scaffold/tools/pkg/configs"
 	"fmt"
 	"math/big"
 	"os"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -87,13 +91,13 @@ func DefaultSupport(AddressesFilePath, chainNodeURL string) (*Support, error) {
 
 func DefaultPrivateKey() (*ecdsa.PrivateKey, error) {
 	if err := godotenv.Load(); err != nil {
-		fmt.Printf("Warning: Error loading .env file: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Warning: Error loading .env file: %v\n", err)
 	}
-	privKeyString := os.Getenv("PRIV_KEY")
-	fmt.Printf("privKeyString: %s\n", privKeyString)
+	privKeyString := os.Getenv("DEPLOYMENT_PRIVATE_KEY")
 
 	if privKeyString == "" {
-		fmt.Println("Warning: PRIV_KEY not set, falling back to hardcoded dev key (only works on local devnet)")
+		fmt.Fprintln(os.Stderr, "WARNING: DEPLOYMENT_PRIVATE_KEY not set — using hardcoded Hardhat dev key")
+		fmt.Fprintln(os.Stderr, "         This key only has funds on local devnets (Hardhat/Anvil)")
 		return configs.PrvWithFunds, nil
 	} else {
 		if strings.HasPrefix(privKeyString, "0x") || strings.HasPrefix(privKeyString, "0X") {
@@ -177,9 +181,11 @@ func NewSupport(prv *ecdsa.PrivateKey, chainClient *ethclient.Client, addresses 
 }
 
 func CheckTx(tx *types.Transaction, client *ethclient.Client) (*types.Receipt, error) {
-	receipt, err := bind.WaitMined(context.Background(), client, tx)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
-		return nil, errors.Errorf("%s", err)
+		return nil, errors.Errorf("transaction not mined within 2 minutes (tx: %s): %s", tx.Hash().Hex(), err)
 	}
 	if receipt.Status == 0 {
 		reason, err := getFailingMessage(client, tx.Hash())
@@ -214,10 +220,46 @@ func getFailingMessage(client *ethclient.Client, hash common.Hash) (string, erro
 
 	res, err := client.CallContract(context.Background(), msg, nil)
 	if err != nil {
-		return "", errors.Errorf("%s", err)
+		// Try to decode revert reason from the error itself
+		if reason := decodeRevertFromError(err); reason != "" {
+			return reason, nil
+		}
+		return err.Error(), nil
 	}
 
-	return string(res), nil
+	// Decode ABI-encoded revert reason from call result
+	if reason, unpackErr := abi.UnpackRevert(res); unpackErr == nil {
+		return reason, nil
+	}
+
+	// Fallback: return hex-encoded bytes instead of raw binary garbage
+	if len(res) > 0 {
+		return fmt.Sprintf("0x%x", res), nil
+	}
+
+	return "unknown revert reason", nil
+}
+
+// decodeRevertFromError extracts a revert reason from an RPC error's data field.
+func decodeRevertFromError(err error) string {
+	type dataError interface {
+		ErrorData() interface{}
+	}
+	var de dataError
+	if stderrors.As(err, &de) {
+		if data := de.ErrorData(); data != nil {
+			if hexStr, ok := data.(string); ok {
+				hexStr = strings.TrimPrefix(hexStr, "0x")
+				decoded, decErr := hex.DecodeString(hexStr)
+				if decErr == nil {
+					if reason, unpackErr := abi.UnpackRevert(decoded); unpackErr == nil {
+						return reason
+					}
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // RawContract mirrors the JSON entries
