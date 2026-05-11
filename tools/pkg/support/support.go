@@ -21,15 +21,15 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/fdc2hub"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/fdc2/fdc2hub"
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/system"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teeextensionregistry"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teemachineregistry"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teeownerallowlist"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teeverification"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teewalletkeymanager"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teewalletmanager"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teewalletprojectmanager"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/extensionmanager"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/machinemanager"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/ownerallowlist"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/verification"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/walletkeymanager"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/walletmanager"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/walletprojectmanager"
 	"github.com/joho/godotenv"
 
 	"github.com/pkg/errors"
@@ -38,15 +38,18 @@ import (
 type Support struct {
 	Prv *ecdsa.PrivateKey // funded private key
 
-	FlareSystemManager      *system.FlareSystemsManager
-	TeeMachineRegistry      *teemachineregistry.TeeMachineRegistry
-	TeeWalletProjectManager *teewalletprojectmanager.TeeWalletProjectManager
-	TeeWalletManager        *teewalletmanager.TeeWalletManager
-	TeeWalletKeyManager     *teewalletkeymanager.TeeWalletKeyManager
-	Fdc2Hub                 *fdc2hub.Fdc2Hub
-	TeeVerification         *teeverification.TeeVerification
-	TeeExtensionRegistry    *teeextensionregistry.TeeExtensionRegistry
-	TeeOwnerAllowlist       *teeownerallowlist.TeeOwnerAllowlist
+	FlareSystemManager *system.FlareSystemsManager
+	Fdc2Hub            *fdc2hub.Fdc2Hub
+
+	// Diamond-pattern facet bindings. All are bound to the same FlareTeeManager
+	// (diamond proxy) address; the diamond routes each call to the correct facet.
+	TeeMachineRegistry      *machinemanager.MachineManager
+	TeeWalletProjectManager *walletprojectmanager.WalletProjectManager
+	TeeWalletManager        *walletmanager.WalletManager
+	TeeWalletKeyManager     *walletkeymanager.WalletKeyManager
+	TeeVerification         *verification.Verification
+	TeeExtensionRegistry    *extensionmanager.ExtensionManager
+	TeeOwnerAllowlist       *ownerallowlist.OwnerAllowlist
 
 	Addresses *Addresses
 
@@ -55,15 +58,12 @@ type Support struct {
 }
 
 type Addresses struct {
-	TeeMachineRegistry      common.Address `json:"TeeMachineRegistry"`
-	TeeWalletManager        common.Address `json:"TeeWalletManager"`
-	TeeWalletKeyManager     common.Address `json:"TeeWalletKeyManager"`
-	TeeWalletProjectManager common.Address `json:"TeeWalletProjectManager"`
-	FlareSystemManager      common.Address `json:"FlareSystemsManager"`
-	Fdc2Hub                 common.Address `json:"Fdc2Hub"`
-	TeeVerification         common.Address `json:"TeeVerification"`
-	TeeExtensionRegistry    common.Address `json:"TeeExtensionRegistry"`
-	TeeOwnerAllowlist       common.Address `json:"TeeOwnerAllowlist"`
+	FlareSystemManager common.Address `json:"FlareSystemsManager"`
+	Fdc2Hub            common.Address `json:"Fdc2Hub"`
+	// FlareTeeManager is the diamond proxy that exposes every TEE facet
+	// (ExtensionManager, MachineManager, Verification, WalletManager,
+	// WalletKeyManager, WalletProjectManager, OwnerAllowlist) at a single address.
+	FlareTeeManager common.Address `json:"FlareTeeManager"`
 }
 
 func DefaultSupport(AddressesFilePath, chainNodeURL string) (*Support, error) {
@@ -113,22 +113,25 @@ func DefaultPrivateKey() (*ecdsa.PrivateKey, error) {
 }
 
 func NewSupport(prv *ecdsa.PrivateKey, chainClient *ethclient.Client, addresses *Addresses) (*Support, error) {
-	tr, err := teemachineregistry.NewTeeMachineRegistry(addresses.TeeMachineRegistry, chainClient)
+	// Every TEE facet binding is wired to the FlareTeeManager diamond proxy.
+	diamond := addresses.FlareTeeManager
+
+	tr, err := machinemanager.NewMachineManager(diamond, chainClient)
 	if err != nil {
 		return nil, err
 	}
 
-	twm, err := teewalletmanager.NewTeeWalletManager(addresses.TeeWalletManager, chainClient)
+	twm, err := walletmanager.NewWalletManager(diamond, chainClient)
 	if err != nil {
 		return nil, err
 	}
 
-	twkm, err := teewalletkeymanager.NewTeeWalletKeyManager(addresses.TeeWalletKeyManager, chainClient)
+	twkm, err := walletkeymanager.NewWalletKeyManager(diamond, chainClient)
 	if err != nil {
 		return nil, err
 	}
 
-	twpm, err := teewalletprojectmanager.NewTeeWalletProjectManager(addresses.TeeWalletProjectManager, chainClient)
+	twpm, err := walletprojectmanager.NewWalletProjectManager(diamond, chainClient)
 	if err != nil {
 		return nil, err
 	}
@@ -143,17 +146,17 @@ func NewSupport(prv *ecdsa.PrivateKey, chainClient *ethclient.Client, addresses 
 		return nil, err
 	}
 
-	tv, err := teeverification.NewTeeVerification(addresses.TeeVerification, chainClient)
+	tv, err := verification.NewVerification(diamond, chainClient)
 	if err != nil {
 		return nil, err
 	}
 
-	ter, err := teeextensionregistry.NewTeeExtensionRegistry(addresses.TeeExtensionRegistry, chainClient)
+	ter, err := extensionmanager.NewExtensionManager(diamond, chainClient)
 	if err != nil {
 		return nil, err
 	}
 
-	toal, err := teeownerallowlist.NewTeeOwnerAllowlist(addresses.TeeOwnerAllowlist, chainClient)
+	toal, err := ownerallowlist.NewOwnerAllowlist(diamond, chainClient)
 	if err != nil {
 		return nil, err
 	}

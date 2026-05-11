@@ -102,8 +102,8 @@ func deployFreshInstructionSender(t *testing.T) (common.Address, *helloworld.Hel
 
 	address, tx, contract, err := helloworld.DeployHelloWorldInstructionSender(
 		opts, testSupport.ChainClient,
-		testSupport.Addresses.TeeExtensionRegistry,
-		testSupport.Addresses.TeeMachineRegistry,
+		testSupport.Addresses.FlareTeeManager,
+		testSupport.Addresses.FlareTeeManager,
 	)
 	if err != nil {
 		t.Fatalf("failed to deploy InstructionSender: %v", err)

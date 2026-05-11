@@ -17,8 +17,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teeextensionregistry"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teeownerallowlist"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/extensionmanager"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/ownerallowlist"
 	"github.com/flare-foundation/tee-node/pkg/wallets"
 )
 
@@ -279,8 +279,8 @@ func RegisterRegistrationChecks(
 	r *Report,
 	client *ethclient.Client,
 	key *ecdsa.PrivateKey,
-	registry *teeextensionregistry.TeeExtensionRegistry,
-	allowlist *teeownerallowlist.TeeOwnerAllowlist,
+	registry *extensionmanager.ExtensionManager,
+	allowlist *ownerallowlist.OwnerAllowlist,
 	extensionEnvPath string,
 ) {
 	// If no config path provided, skip all registration checks.

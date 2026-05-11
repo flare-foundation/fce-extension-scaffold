@@ -62,6 +62,23 @@ func main() {
 	logger.Infof("TEE ID:       %s", teeID.Hex())
 	logger.Infof("Version:      %s", *versionF)
 	logger.Warnf("NOTE: Code hash is from proxy /info response — not independently verified against attestation")
+
+	// Idempotency: skip if this codeHash+platform combo is already registered and active.
+	// Avoids sending a tx that would revert with VersionAlreadyExists() on re-runs.
+	supported, err := testSupport.TeeExtensionRegistry.IsCodeHashPlatformSupported(
+		nil,
+		teeInfo.MachineData.ExtensionID.Big(),
+		teeInfo.MachineData.CodeHash,
+		teeInfo.MachineData.Platform,
+	)
+	if err != nil {
+		fccutils.FatalWithCause(err)
+	}
+	if supported {
+		logger.Infof("version already registered for this code hash + platform, skipping")
+		return
+	}
+
 	err = fccutils.AddTeeVersion(testSupport, privKey, teeInfo.MachineData.ExtensionID.Big(), teeInfo.MachineData.CodeHash, teeInfo.MachineData.Platform, common.Hash{}, *versionF)
 	if err != nil {
 		if strings.Contains(err.Error(), "VersionAlreadyExists") {

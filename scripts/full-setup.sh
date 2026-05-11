@@ -2,30 +2,95 @@
 # full-setup.sh — Run the complete extension lifecycle: pre-build → start → post-build → test.
 #
 # Usage:
-#   ./scripts/full-setup.sh                  # setup only (steps 1-3), docker compose
-#   ./scripts/full-setup.sh --test           # setup + run e2e test (steps 1-4)
-#   ./scripts/full-setup.sh --local          # start services as Go processes instead of docker
-#   ./scripts/full-setup.sh --local --test   # both
+#   ./scripts/full-setup.sh                          # setup only, docker compose, local devnet
+#   ./scripts/full-setup.sh --test                   # setup + run e2e test
+#   ./scripts/full-setup.sh --local                  # start services as Go processes instead of docker
+#   ./scripts/full-setup.sh --chain coston           # target Coston testnet (chain_id=16)
+#   ./scripts/full-setup.sh --chain coston2 --test   # target Coston2 testnet + run tests
+#
+# Flags:
+#   --chain <name>   local | coston | coston2 (default: local)
+#   --local          run TEE + proxy as background Go processes instead of Docker
+#   --test           run scripts/test.sh after setup
 #
 # Prerequisites:
-#   - Infrastructure running (Hardhat, indexer, Redis, normal TEE + proxy)
+#   - Local devnet: Hardhat, indexer, Redis, normal TEE + proxy running.
+#   - Coston/Coston2: a reachable chain indexer DB. For Coston, bring up
+#     e2e/docker/coston (coston-indexer-db + coston-indexer) before this script.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[full-setup]${NC} $*"; }
+warn() { echo -e "${YELLOW}[full-setup]${NC} $*"; }
 die()  { echo -e "${RED}[full-setup] ERROR:${NC} $*" >&2; exit 1; }
 
 RUN_TESTS=false
 USE_LOCAL=false
-for arg in "$@"; do
-    case "$arg" in
-        --test) RUN_TESTS=true ;;
-        --local) USE_LOCAL=true ;;
-        *) die "Unknown argument: $arg" ;;
+CHAIN=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --test) RUN_TESTS=true; shift ;;
+        --local) USE_LOCAL=true; shift ;;
+        --chain) [[ $# -ge 2 ]] || die "--chain requires a value (local|coston|coston2)"
+                 CHAIN="$2"; shift 2 ;;
+        --chain=*) CHAIN="${1#--chain=}"; shift ;;
+        *) die "Unknown argument: $1" ;;
     esac
 done
+
+# --- Resolve chain (flag > env > legacy LOCAL_MODE) ---
+# Load .env first so user-set defaults are visible
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$PROJECT_DIR/.env"
+    set +a
+fi
+
+if [[ -z "$CHAIN" ]]; then
+    if [[ -n "${CHAIN:-}" ]]; then
+        :  # honor env CHAIN
+    elif [[ "${LOCAL_MODE:-true}" == "true" ]]; then
+        CHAIN="local"
+    else
+        # Legacy default: LOCAL_MODE=false meant Coston2
+        CHAIN="coston2"
+    fi
+fi
+
+# --- Apply chain defaults (don't clobber explicit env settings) ---
+case "$CHAIN" in
+    local)
+        export LOCAL_MODE="true"
+        ;;
+    coston)
+        export LOCAL_MODE="false"
+        export ADDRESSES_FILE="${ADDRESSES_FILE:-$PROJECT_DIR/config/coston/deployed-addresses.json}"
+        export CHAIN_URL="${CHAIN_URL:-https://coston-api.flare.network/ext/C/rpc}"
+        export NORMAL_PROXY_URL="${NORMAL_PROXY_URL:-https://tee-proxy-coston-1.flare.rocks}"
+        ;;
+    coston2)
+        export LOCAL_MODE="false"
+        export ADDRESSES_FILE="${ADDRESSES_FILE:-$PROJECT_DIR/config/coston2/deployed-addresses.json}"
+        export CHAIN_URL="${CHAIN_URL:-https://coston2-api.flare.network/ext/C/rpc}"
+        export NORMAL_PROXY_URL="${NORMAL_PROXY_URL:-https://tee-proxy-coston2-1.flare.rocks}"
+        ;;
+    *) die "Unknown --chain value: $CHAIN (valid: local, coston, coston2)" ;;
+esac
+export CHAIN
+
+log "Chain: $CHAIN"
+
+# --- Indexer reachability hint for testnets ---
+if [[ "$CHAIN" == "coston" ]]; then
+    if ! (echo > /dev/tcp/127.0.0.1/3306) >/dev/null 2>&1; then
+        warn "No service on 127.0.0.1:3306 — the ext-proxy needs a Coston indexer DB."
+        warn "Start it with: (cd ../../e2e/docker/coston && docker compose up -d coston-indexer-db coston-indexer)"
+    fi
+fi
 
 # --- Phase 1: Pre-build (deploy contract, register extension) ---
 echo -e "\n${CYAN}╔══════════════════════════════════════╗${NC}"
@@ -45,11 +110,9 @@ fi
 echo -e "\n${CYAN}╔══════════════════════════════════════╗${NC}"
 echo -e "${CYAN}║  Phase 2: Start services             ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
-if [[ "$USE_LOCAL" == "true" ]]; then
-    "$SCRIPT_DIR/start-services.sh" --local || die "Failed to start services"
-else
-    "$SCRIPT_DIR/start-services.sh" || die "Failed to start services"
-fi
+START_ARGS=(--chain "$CHAIN")
+[[ "$USE_LOCAL" == "true" ]] && START_ARGS+=(--local)
+"$SCRIPT_DIR/start-services.sh" "${START_ARGS[@]}" || die "Failed to start services"
 
 # --- Phase 3: Post-build (register TEE version + machine) ---
 echo -e "\n${CYAN}╔══════════════════════════════════════╗${NC}"
@@ -81,8 +144,6 @@ if [[ "$RUN_TESTS" == "true" ]]; then
 fi
 echo -e "${GREEN}========================================${NC}"
 echo ""
-if [[ "$USE_LOCAL" == "true" ]]; then
-    echo -e "${CYAN}Stop services:${NC}  ./scripts/stop-services.sh --local"
-else
-    echo -e "${CYAN}Stop services:${NC}  ./scripts/stop-services.sh"
-fi
+STOP_HINT="./scripts/stop-services.sh --chain $CHAIN"
+[[ "$USE_LOCAL" == "true" ]] && STOP_HINT="$STOP_HINT --local"
+echo -e "${CYAN}Stop services:${NC}  $STOP_HINT"

@@ -17,7 +17,7 @@ import (
 func TestDeploy_ZeroRegistryAddress(t *testing.T) {
 	err := deployInstructionSenderRaw(t,
 		common.Address{}, // zero address for TeeExtensionRegistry
-		testSupport.Addresses.TeeMachineRegistry,
+		testSupport.Addresses.FlareTeeManager,
 	)
 	if err == nil {
 		t.Fatal("expected deployment to fail with zero TeeExtensionRegistry address, but it succeeded")
@@ -44,7 +44,7 @@ func TestDeploy_ZeroRegistryAddress(t *testing.T) {
 
 func TestDeploy_ZeroMachineRegistryAddress(t *testing.T) {
 	err := deployInstructionSenderRaw(t,
-		testSupport.Addresses.TeeExtensionRegistry,
+		testSupport.Addresses.FlareTeeManager,
 		common.Address{}, // zero address for TeeMachineRegistry
 	)
 	if err == nil {
@@ -79,7 +79,7 @@ func TestDeploy_EOAAsRegistry(t *testing.T) {
 
 	deployErr := deployInstructionSenderRaw(t,
 		eoaAddr, // EOA with no code
-		testSupport.Addresses.TeeMachineRegistry,
+		testSupport.Addresses.FlareTeeManager,
 	)
 	if deployErr == nil {
 		t.Fatal("expected deployment to fail with EOA as TeeExtensionRegistry, but it succeeded")

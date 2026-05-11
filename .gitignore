@@ -1,7 +1,9 @@
 *.env
 !.env.example
 
-# Coston2 proxy configs (contain DB credentials)
+# Coston/Coston2 proxy configs (contain DB credentials)
+config/proxy/extension_proxy.coston.toml
+config/proxy/extension_proxy.coston.docker.toml
 config/proxy/extension_proxy.coston2.toml
 config/proxy/extension_proxy.coston2.docker.toml
 config/extension.env

@@ -28,8 +28,8 @@ func TestCheckTx_SuccessfulTx(t *testing.T) {
 
 	_, tx, _, err := helloworld.DeployHelloWorldInstructionSender(
 		opts, testSupport.ChainClient,
-		testSupport.Addresses.TeeExtensionRegistry,
-		testSupport.Addresses.TeeMachineRegistry,
+		testSupport.Addresses.FlareTeeManager,
+		testSupport.Addresses.FlareTeeManager,
 	)
 	if err != nil {
 		t.Fatalf("deploy failed: %v", err)

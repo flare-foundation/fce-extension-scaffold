@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teemachineregistry"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/machinemanager"
 	"github.com/flare-foundation/go-flare-common/pkg/encoding"
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
 	"github.com/flare-foundation/tee-node/pkg/fdc"
@@ -166,12 +166,12 @@ func PreRegistration(
 	}
 	opts.Value = big.NewInt(int64(1000000000))
 
-	teeMachineDataRegistry := teemachineregistry.ITeeMachineRegistryTeeMachineData{
+	teeMachineDataRegistry := machinemanager.IMachineManagerTeeMachineData{
 		ExtensionId:  new(big.Int).SetBytes(teeInfo.MachineData.ExtensionID.Bytes()),
 		InitialOwner: teeInfo.MachineData.InitialOwner,
 		CodeHash:     teeInfo.MachineData.CodeHash,
 		Platform:     teeInfo.MachineData.Platform,
-		PublicKey:    teemachineregistry.PublicKey{X: teeInfo.MachineData.PublicKey.X, Y: teeInfo.MachineData.PublicKey.Y},
+		PublicKey:    machinemanager.PublicKey{X: teeInfo.MachineData.PublicKey.X, Y: teeInfo.MachineData.PublicKey.Y},
 	}
 
 	if len(teeInfo.DataSignature) != 65 {
@@ -179,7 +179,7 @@ func PreRegistration(
 	}
 	sigVRS := encoding.TransformSignatureRSVtoVRS(teeInfo.DataSignature)
 
-	signature := teemachineregistry.Signature{
+	signature := machinemanager.Signature{
 		V: sigVRS[0],
 		R: [32]byte(sigVRS[1:33]),
 		S: [32]byte(sigVRS[33:65]),
@@ -206,7 +206,7 @@ func PreRegistration(
 	}
 	challenge := attestEvent.Challenge
 
-	event, err := s.TeeExtensionRegistry.ParseTeeInstructionsSent(*receipt.Logs[0])
+	event, err := s.TeeVerification.ParseTeeInstructionsSent(*receipt.Logs[0])
 	if err != nil {
 		return common.Hash{}, common.Hash{}, errors.Errorf("failed to parse TeeInstructionsSent event: %s", err)
 	}
@@ -237,7 +237,7 @@ func RequestTeeAttestation(s *support.Support, teeID common.Address) (common.Has
 	if len(receipt.Logs) < 2 {
 		return common.Hash{}, errors.New("unexpected logs, this should not happen")
 	}
-	event, err := s.TeeExtensionRegistry.ParseTeeInstructionsSent(*receipt.Logs[0])
+	event, err := s.TeeVerification.ParseTeeInstructionsSent(*receipt.Logs[0])
 	if err != nil {
 		return common.Hash{}, errors.Errorf("failed to parse TeeInstructionsSent event: %s", err)
 	}
@@ -258,6 +258,7 @@ func RequestFTDCAvailabilityCheck(s *support.Support, teeID, externalTeeID commo
 	proofOwner := claimBackAddress
 	tx, err := s.TeeVerification.RequestAvailabilityCheckAttestation(opts, teeID, teeAttestInstructionID, externalTeeID, proofOwner, claimBackAddress)
 	if err != nil {
+		diagAvailabilityCheckRevert(s, opts, teeID, teeAttestInstructionID, externalTeeID, proofOwner, claimBackAddress)
 		return common.Hash{}, errors.Errorf("%s", err)
 	}
 	receipt, err := support.CheckTx(tx, s.ChainClient)
@@ -267,7 +268,7 @@ func RequestFTDCAvailabilityCheck(s *support.Support, teeID, externalTeeID commo
 	if len(receipt.Logs) == 0 {
 		return common.Hash{}, errors.New("no logs found in receipt")
 	}
-	event, err := s.TeeExtensionRegistry.ParseTeeInstructionsSent(*receipt.Logs[0])
+	event, err := s.TeeVerification.ParseTeeInstructionsSent(*receipt.Logs[0])
 	if err != nil {
 		return common.Hash{}, errors.Errorf("failed to parse TeeInstructionsSent event: %s", err)
 	}
@@ -278,7 +279,7 @@ func RequestFTDCAvailabilityCheck(s *support.Support, teeID, externalTeeID commo
 	return instructionID, nil
 }
 
-func GetFTDCAvailabilityCheckResult(hostURL string, instructionId common.Hash) (*teemachineregistry.ITeeAvailabilityCheckProof, error) {
+func GetFTDCAvailabilityCheckResult(hostURL string, instructionId common.Hash) (*machinemanager.ITeeAvailabilityCheckProof, error) {
 	actionResult, err := ActionResult(hostURL, instructionId)
 	if err != nil {
 		return nil, err
@@ -303,18 +304,18 @@ func GetFTDCAvailabilityCheckResult(hostURL string, instructionId common.Hash) (
 		return nil, errors.Errorf("%s", err)
 	}
 
-	toProductionProof := teemachineregistry.ITeeAvailabilityCheckProof{
-		Signatures:  teemachineregistry.IFdc2VerificationFdc2Signatures{SigningPolicySignatures: ftdcProof.DataProviderSignatures},
-		Header:      teemachineregistry.IFdc2HubFdc2ResponseHeader(header),
-		RequestBody: teemachineregistry.ITeeAvailabilityCheckRequestBody(request),
-		ResponseBody: teemachineregistry.ITeeAvailabilityCheckResponseBody{
+	toProductionProof := machinemanager.ITeeAvailabilityCheckProof{
+		Signatures:  machinemanager.IFdc2VerificationFdc2Signatures{SigningPolicySignatures: ftdcProof.DataProviderSignatures},
+		Header:      machinemanager.IFdc2HubFdc2ResponseHeader(header),
+		RequestBody: machinemanager.ITeeAvailabilityCheckRequestBody(request),
+		ResponseBody: machinemanager.ITeeAvailabilityCheckResponseBody{
 			Status:                 response.Status,
 			TeeTimestamp:           response.TeeTimestamp,
 			CodeHash:               response.CodeHash,
 			Platform:               response.Platform,
 			InitialSigningPolicyId: response.InitialSigningPolicyId,
 			LastSigningPolicyId:    response.LastSigningPolicyId,
-			State:                  teemachineregistry.ITeeAvailabilityCheckTeeState(response.State),
+			State:                  machinemanager.ITeeAvailabilityCheckTeeState(response.State),
 		},
 	}
 
@@ -323,7 +324,7 @@ func GetFTDCAvailabilityCheckResult(hostURL string, instructionId common.Hash) (
 	return &toProductionProof, nil
 }
 
-func ToProduction(s *support.Support, toProductionProof *teemachineregistry.ITeeAvailabilityCheckProof) error {
+func ToProduction(s *support.Support, toProductionProof *machinemanager.ITeeAvailabilityCheckProof) error {
 	opts, err := bind.NewKeyedTransactorWithChainID(s.Prv, s.ChainID)
 	if err != nil {
 		return errors.Errorf("%s", err)

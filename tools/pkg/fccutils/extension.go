@@ -8,8 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teeextensionregistry"
-	"github.com/flare-foundation/go-flare-common/pkg/contracts/teeownerallowlist"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/extensionmanager"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/ownerallowlist"
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
 	"github.com/flare-foundation/tee-node/pkg/wallets"
 	"github.com/pkg/errors"
@@ -123,7 +123,7 @@ func IsKeyTypeSupported(s *support.Support, extensionId *big.Int, keyType common
 func registerExtension(
 	s *support.Support, opts *bind.TransactOpts, instructionsSenderAddress, stateVerifierAddress common.Address,
 ) (
-	*teeextensionregistry.TeeExtensionRegistryTeeExtensionRegistered, *teeextensionregistry.TeeExtensionRegistryTeeExtensionContractsSet, error,
+	*extensionmanager.ExtensionManagerTeeExtensionRegistered, *extensionmanager.ExtensionManagerTeeExtensionContractsSet, error,
 ) {
 	tx, err := s.TeeExtensionRegistry.Register(opts, stateVerifierAddress, instructionsSenderAddress)
 	if err != nil {
@@ -160,7 +160,7 @@ func registerExtension(
 	return extensionRegistered, extensionContractsSet, nil
 }
 
-func allowTeeMachineOwners(s *support.Support, opts *bind.TransactOpts, extensionId *big.Int, owners []common.Address) (*teeownerallowlist.TeeOwnerAllowlistAllowedTeeMachineOwnersAdded, error) {
+func allowTeeMachineOwners(s *support.Support, opts *bind.TransactOpts, extensionId *big.Int, owners []common.Address) (*ownerallowlist.OwnerAllowlistAllowedTeeMachineOwnersAdded, error) {
 	tx, err := s.TeeOwnerAllowlist.AddAllowedTeeMachineOwners(opts, extensionId, owners)
 	if err != nil {
 		return nil, errors.Errorf("AddAllowedTeeMachineOwners failed: %s", err)
@@ -183,7 +183,7 @@ func allowTeeMachineOwners(s *support.Support, opts *bind.TransactOpts, extensio
 	return ownersAdded, nil
 }
 
-func allowTeeProjectManagerOwners(s *support.Support, opts *bind.TransactOpts, extensionId *big.Int, owners []common.Address) (*teeownerallowlist.TeeOwnerAllowlistAllowedTeeWalletProjectOwnersAdded, error) {
+func allowTeeProjectManagerOwners(s *support.Support, opts *bind.TransactOpts, extensionId *big.Int, owners []common.Address) (*ownerallowlist.OwnerAllowlistAllowedTeeWalletProjectOwnersAdded, error) {
 	tx, err := s.TeeOwnerAllowlist.AddAllowedTeeWalletProjectOwners(opts, extensionId, owners)
 	if err != nil {
 		return nil, errors.Errorf("AddAllowedTeeWalletProjectOwners failed: %s", err)
