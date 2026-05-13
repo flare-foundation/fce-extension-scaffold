@@ -32,19 +32,12 @@ func main() {
 	deployer := crypto.PubkeyToAddress(testSupport.Prv.PublicKey)
 	logger.Infof("Deployer:             %s", deployer.Hex())
 	logger.Infof("Chain ID:             %s", testSupport.ChainID.String())
-	logger.Infof("TeeExtensionRegistry: %s", testSupport.Addresses.TeeExtensionRegistry.Hex())
-	logger.Infof("TeeMachineRegistry:   %s", testSupport.Addresses.TeeMachineRegistry.Hex())
+	logger.Infof("FlareTeeManager:      %s", testSupport.Addresses.FlareTeeManager.Hex())
 
-	if err := validate.AddressNotZero(testSupport.Addresses.TeeExtensionRegistry, "TeeExtensionRegistry"); err != nil {
+	if err := validate.AddressNotZero(testSupport.Addresses.FlareTeeManager, "FlareTeeManager"); err != nil {
 		fccutils.FatalWithCause(err)
 	}
-	if err := validate.AddressNotZero(testSupport.Addresses.TeeMachineRegistry, "TeeMachineRegistry"); err != nil {
-		fccutils.FatalWithCause(err)
-	}
-	if err := validate.AddressHasCode(testSupport.ChainClient, testSupport.Addresses.TeeExtensionRegistry, "TeeExtensionRegistry"); err != nil {
-		fccutils.FatalWithCause(err)
-	}
-	if err := validate.AddressHasCode(testSupport.ChainClient, testSupport.Addresses.TeeMachineRegistry, "TeeMachineRegistry"); err != nil {
+	if err := validate.AddressHasCode(testSupport.ChainClient, testSupport.Addresses.FlareTeeManager, "FlareTeeManager"); err != nil {
 		fccutils.FatalWithCause(err)
 	}
 	if err := validate.KeyHasFunds(testSupport.ChainClient, testSupport.Prv, validate.MinDeployBalance); err != nil {

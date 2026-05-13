@@ -17,20 +17,11 @@ import (
 func TestAddressHasCode_DeployedContract(t *testing.T) {
 	err := validate.AddressHasCode(
 		testSupport.ChainClient,
-		testSupport.Addresses.TeeExtensionRegistry,
-		"TeeExtensionRegistry",
+		testSupport.Addresses.FlareTeeManager,
+		"FlareTeeManager",
 	)
 	if err != nil {
-		t.Fatalf("expected TeeExtensionRegistry to have code, got error: %v", err)
-	}
-
-	err = validate.AddressHasCode(
-		testSupport.ChainClient,
-		testSupport.Addresses.TeeMachineRegistry,
-		"TeeMachineRegistry",
-	)
-	if err != nil {
-		t.Fatalf("expected TeeMachineRegistry to have code, got error: %v", err)
+		t.Fatalf("expected FlareTeeManager to have code, got error: %v", err)
 	}
 }
 

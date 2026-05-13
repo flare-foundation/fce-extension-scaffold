@@ -45,8 +45,7 @@ func main() {
 		}
 
 		addresses := map[string]common.Address{
-			"TeeExtensionRegistry": s.Addresses.TeeExtensionRegistry,
-			"TeeMachineRegistry":   s.Addresses.TeeMachineRegistry,
+			"FlareTeeManager": s.Addresses.FlareTeeManager,
 		}
 
 		switch *step {

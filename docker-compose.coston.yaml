@@ -1,0 +1,22 @@
+# Docker Compose override for Coston (chain_id=16) deployment.
+#
+# Usage:
+#   docker compose -f docker-compose.yaml -f docker-compose.coston.yaml up -d
+#
+# The proxy needs a chain indexer DB on host.docker.internal:3306. Bring up the
+# existing Coston indexer (already wired to the new FlareTeeManager diamond)
+# beforehand:
+#   cd ../../e2e/docker/coston && docker compose up -d coston-indexer-db coston-indexer
+services:
+  ext-proxy:
+    volumes:
+      - ./config/proxy/extension_proxy.coston.docker.toml:/app/config/config.toml:ro
+
+  extension-tee:
+    environment:
+      - CHAIN_URL=${CHAIN_URL:-https://coston-api.flare.network/ext/C/rpc}
+
+networks:
+  default:
+    name: ${COMPOSE_NETWORK:-extension-scaffold-coston}
+    external: false

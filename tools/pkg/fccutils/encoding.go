@@ -4,7 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
 	"github.com/flare-foundation/go-flare-common/pkg/tee/structs"
-	"github.com/flare-foundation/go-flare-common/pkg/tee/structs/connector"
+	"github.com/flare-foundation/go-flare-common/pkg/tee/structs/fdc2"
 	"github.com/pkg/errors"
 )
 
@@ -30,28 +30,28 @@ func FatalWithCause(err error) {
 	}
 }
 
-func EncodeFTDCTeeAvailabilityCheckRequest(data connector.ITeeAvailabilityCheckRequestBody) ([]byte, error) {
-	return structs.Encode(connector.AttestationTypeArguments[connector.AvailabilityCheck].Request, data)
+func EncodeFTDCTeeAvailabilityCheckRequest(data fdc2.ITeeAvailabilityCheckRequestBody) ([]byte, error) {
+	return structs.Encode(fdc2.AttestationTypeArguments[fdc2.AvailabilityCheck].Request, data)
 }
 
-func DecodeFTDCTeeAvailabilityCheckRequest(data []byte) (connector.ITeeAvailabilityCheckRequestBody, error) {
-	var request connector.ITeeAvailabilityCheckRequestBody
-	err := structs.DecodeTo(connector.AttestationTypeArguments[connector.AvailabilityCheck].Request, data, &request)
+func DecodeFTDCTeeAvailabilityCheckRequest(data []byte) (fdc2.ITeeAvailabilityCheckRequestBody, error) {
+	var request fdc2.ITeeAvailabilityCheckRequestBody
+	err := structs.DecodeTo(fdc2.AttestationTypeArguments[fdc2.AvailabilityCheck].Request, data, &request)
 	if err != nil {
-		return connector.ITeeAvailabilityCheckRequestBody{}, errors.Errorf("%s", err)
+		return fdc2.ITeeAvailabilityCheckRequestBody{}, errors.Errorf("%s", err)
 	}
 	return request, nil
 }
 
-func EncodeFTDCTeeAvailabilityCheckResponse(data connector.ITeeAvailabilityCheckResponseBody) ([]byte, error) {
-	return structs.Encode(connector.AttestationTypeArguments[connector.AvailabilityCheck].Response, data)
+func EncodeFTDCTeeAvailabilityCheckResponse(data fdc2.ITeeAvailabilityCheckResponseBody) ([]byte, error) {
+	return structs.Encode(fdc2.AttestationTypeArguments[fdc2.AvailabilityCheck].Response, data)
 }
 
-func DecodeFTDCTeeAvailabilityCheckResponse(data []byte) (connector.ITeeAvailabilityCheckResponseBody, error) {
-	var request connector.ITeeAvailabilityCheckResponseBody
-	err := structs.DecodeTo(connector.AttestationTypeArguments[connector.AvailabilityCheck].Response, data, &request)
+func DecodeFTDCTeeAvailabilityCheckResponse(data []byte) (fdc2.ITeeAvailabilityCheckResponseBody, error) {
+	var request fdc2.ITeeAvailabilityCheckResponseBody
+	err := structs.DecodeTo(fdc2.AttestationTypeArguments[fdc2.AvailabilityCheck].Response, data, &request)
 	if err != nil {
-		return connector.ITeeAvailabilityCheckResponseBody{}, errors.Errorf("%s", err)
+		return fdc2.ITeeAvailabilityCheckResponseBody{}, errors.Errorf("%s", err)
 	}
 
 	return request, nil

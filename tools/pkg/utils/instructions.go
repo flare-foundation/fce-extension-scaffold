@@ -22,8 +22,10 @@ func DeployInstructionSender(s *support.Support) (common.Address, *helloworld.He
 		return common.Address{}, nil, errors.Errorf("failed to create transactor: %s", err)
 	}
 
+	// Both registry args are the FlareTeeManager diamond proxy: the diamond
+	// routes ExtensionManager and MachineManager calls to the right facets.
 	address, tx, contract, err := helloworld.DeployHelloWorldInstructionSender(
-		opts, s.ChainClient, s.Addresses.TeeExtensionRegistry, s.Addresses.TeeMachineRegistry,
+		opts, s.ChainClient, s.Addresses.FlareTeeManager, s.Addresses.FlareTeeManager,
 	)
 	if err != nil {
 		return common.Address{}, nil, errors.Errorf("failed to deploy contract: %s", err)
@@ -161,7 +163,7 @@ func SendSayHello(s *support.Support, instructionSenderAddress common.Address, m
 		return common.Hash{}, common.Hash{}, errors.New("no logs found in receipt")
 	}
 
-	instructionSent, err := s.TeeExtensionRegistry.ParseTeeInstructionsSent(*receipt.Logs[0])
+	instructionSent, err := s.TeeVerification.ParseTeeInstructionsSent(*receipt.Logs[0])
 	if err != nil {
 		return common.Hash{}, common.Hash{}, errors.Errorf("failed to parse TeeInstructionsSent event: %s", err)
 	}
@@ -199,7 +201,7 @@ func SendSayGoodbye(s *support.Support, instructionSenderAddress common.Address,
 		return common.Hash{}, common.Hash{}, errors.New("no logs found in receipt")
 	}
 
-	instructionSent, err := s.TeeExtensionRegistry.ParseTeeInstructionsSent(*receipt.Logs[0])
+	instructionSent, err := s.TeeVerification.ParseTeeInstructionsSent(*receipt.Logs[0])
 	if err != nil {
 		return common.Hash{}, common.Hash{}, errors.Errorf("failed to parse TeeInstructionsSent event: %s", err)
 	}

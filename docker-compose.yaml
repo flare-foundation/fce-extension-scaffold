@@ -6,11 +6,6 @@ services:
       - "${REDIS_BIND:-127.0.0.1:6382}:6379"
     tmpfs:
       - /data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
 
   ext-proxy:
     image: ${REGISTRY:-local}/tee-proxy
@@ -24,14 +19,7 @@ services:
       - "${EXT_PROXY_INTERNAL_BIND:-0.0.0.0:6673}:6663"
       - "${EXT_PROXY_EXTERNAL_BIND:-0.0.0.0:6674}:6664"
     depends_on:
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:6663/healthy"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
+      - redis
 
   extension-tee:
     build:
@@ -49,23 +37,7 @@ services:
       - EXTENSION_PORT=7702
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
-      ext-proxy:
-        condition: service_healthy
-
-  types-server:
-    build:
-      context: ../..
-      dockerfile: extension-examples/extension-scaffold/Dockerfile
-    command: ["./types-server"]
-    environment:
-      - TYPES_SERVER_PORT=8100
-    ports:
-      - "${TYPES_SERVER_BIND:-0.0.0.0:8100}:8100"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8100/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      - ext-proxy
 
 networks:
   default:

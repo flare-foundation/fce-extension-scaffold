@@ -38,12 +38,18 @@ LOG_FILE="$PROJECT_DIR/config/deploy.log"
 # Auto-detect addresses file
 if [[ -z "$ADDRESSES_FILE" ]]; then
     LOCAL_MODE="${LOCAL_MODE:-true}"
-    if [[ "$LOCAL_MODE" != "true" ]]; then
-        # Non-local mode: use coston2 deployed addresses
-        candidate="$PROJECT_DIR/config/coston2/deployed-addresses.json"
-        if [[ -f "$candidate" ]]; then
-            ADDRESSES_FILE="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
-        fi
+    CHAIN="${CHAIN:-}"
+    # If CHAIN is unset, derive from LOCAL_MODE for backward compat
+    if [[ -z "$CHAIN" ]]; then
+        [[ "$LOCAL_MODE" == "true" ]] && CHAIN="local" || CHAIN="coston2"
+    fi
+    case "$CHAIN" in
+        coston)  candidate="$PROJECT_DIR/config/coston/deployed-addresses.json" ;;
+        coston2) candidate="$PROJECT_DIR/config/coston2/deployed-addresses.json" ;;
+        *)       candidate="" ;;
+    esac
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+        ADDRESSES_FILE="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
     fi
 
     # Fall back to sim_dump candidates (local devnet)
