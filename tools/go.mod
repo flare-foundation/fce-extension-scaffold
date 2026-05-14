@@ -6,7 +6,7 @@ require (
 	extension-scaffold v0.0.0
 	github.com/ethereum/go-ethereum v1.16.7
 	github.com/flare-foundation/go-flare-common v1.2.1-0.20260424152410-876c09e65794
-	github.com/flare-foundation/tee-node v0.0.18
+	github.com/flare-foundation/tee-node v0.0.20
 	github.com/flare-foundation/tee-proxy v0.0.1
 	github.com/joho/godotenv v1.5.1
 	github.com/pkg/errors v0.9.1

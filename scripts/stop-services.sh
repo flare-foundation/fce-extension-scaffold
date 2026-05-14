@@ -75,6 +75,10 @@ else
         coston2) COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.coston2.yaml") ;;
     esac
 
+    # docker-compose.yaml interpolates SOURCE_DATE_EPOCH as a build arg. It's
+    # irrelevant on `down`, but compose still warns when it's unset — silence it.
+    export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+
     log "Stopping Docker Compose services (chain: $CHAIN)..."
     docker compose "${COMPOSE_FILES[@]}" down
     log "Done."
