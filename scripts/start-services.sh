@@ -84,6 +84,17 @@ log "Local mode:   $LOCAL_MODE"
 if [[ "$USE_LOCAL" == "false" ]]; then
     log "Starting services with Docker Compose..."
 
+    # Dockerfile expects SOURCE_DATE_EPOCH for reproducible builds — see REPRODUCIBILITY.md.
+    # Without it, `touch -h -d @${SOURCE_DATE_EPOCH}` in the builder stage fails with "invalid date format '@'".
+    if [[ -z "${SOURCE_DATE_EPOCH:-}" ]]; then
+        if SOURCE_DATE_EPOCH=$(git -C "$PROJECT_DIR" log -1 --format=%ct 2>/dev/null) && [[ -n "$SOURCE_DATE_EPOCH" ]]; then
+            export SOURCE_DATE_EPOCH
+        else
+            export SOURCE_DATE_EPOCH=0
+        fi
+    fi
+    log "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
+
     # --- Build tee-proxy image locally if no remote registry is configured ---
     if [[ -z "${REGISTRY:-}" ]]; then
         if ! docker image inspect local/tee-proxy >/dev/null 2>&1; then

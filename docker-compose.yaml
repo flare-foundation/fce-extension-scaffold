@@ -25,6 +25,8 @@ services:
     build:
       context: ../..
       dockerfile: extension-examples/extension-scaffold/Dockerfile
+      args:
+        SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH}
     env_file:
       - path: ./config/extension.env
         required: false
