@@ -1,7 +1,6 @@
+.env*
 *.env
-!.env.example
-.env.coston
-.env.coston2
+!*.example
 
 # Coston/Coston2 proxy configs (contain DB credentials)
 config/proxy/extension_proxy.coston.toml
