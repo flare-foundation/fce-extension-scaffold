@@ -6,7 +6,7 @@ private_key_variable = "PROXY_PRIVATE_KEY"
 initial_signing_policy_offset = 0
 signing_policy_fetch_interval = "20s"
 
-chain_id = 114
+chain_id = 31337
 
 [db]
 host = "host.docker.internal"

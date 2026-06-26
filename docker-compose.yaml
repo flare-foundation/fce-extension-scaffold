@@ -32,7 +32,16 @@ services:
         required: false
     environment:
       - MODE=${MODE:-1}
+      # Chain id the node binds signatures to — must match the proxy's chain_id
+      # and the chain itself. Local e2e Hardhat = 31337; the coston/coston2
+      # overrides set 16/114 for those networks.
+      - CHAIN_ID=${CHAIN_ID:-31337}
       - INITIAL_OWNER=${INITIAL_OWNER:-0xF4E021377420Afe90c1A7D2b8968904946633a64}
+      # TEE governance the node signs with. Must match what set-governance
+      # registers on-chain (post-build reads the same vars). Defaults to the
+      # deployer (INITIAL_OWNER) as sole signer, threshold 1; override in .env.
+      - GOVERNANCE_SIGNERS=${GOVERNANCE_SIGNERS:-${INITIAL_OWNER:-0xF4E021377420Afe90c1A7D2b8968904946633a64}}
+      - GOVERNANCE_THRESHOLD=${GOVERNANCE_THRESHOLD:-1}
       - PROXY_URL=http://ext-proxy:6663
       - CONFIG_PORT=5501
       - SIGN_PORT=7701

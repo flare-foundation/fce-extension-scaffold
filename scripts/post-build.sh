@@ -127,12 +127,24 @@ go run ./cmd/allow-tee-version \
     -version "$TEE_VERSION" \
     || die "Allow TEE version failed"
 
+# --- Step 2: Set TEE governance on extension ---
+# Registers the governance signer set + threshold the TEE node signs with.
+# Reads GOVERNANCE_SIGNERS / GOVERNANCE_THRESHOLD (default: deployer, threshold 1)
+# and MUST match the same vars passed to the TEE node container, or register-tee
+# fails with InvalidGovernanceHash.
+step 2 "Set TEE governance"
+go run ./cmd/set-governance \
+    -a "$ADDRESSES_FILE" \
+    -c "$CHAIN_URL" \
+    -p "$EXT_PROXY_URL" \
+    || die "Set TEE governance failed"
+
 # Export SIMULATED_TEE for register-tee (controls attestation mode)
 export SIMULATED_TEE="${SIMULATED_TEE:-true}"
 log "Simulated TEE: $SIMULATED_TEE"
 
-# --- Step 2: Register TEE on-chain ---
-step 2 "Register TEE machine"
+# --- Step 3: Register TEE on-chain ---
+step 3 "Register TEE machine"
 go run ./cmd/register-tee \
     -a "$ADDRESSES_FILE" \
     -c "$CHAIN_URL" \
