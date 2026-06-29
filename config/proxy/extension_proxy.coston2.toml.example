@@ -1,7 +1,7 @@
 redis_port = ":6380"
 
 private_key_variable = ""
-initial_signing_policy_offset = 0
+initial_signing_policy_offset = 2
 signing_policy_fetch_interval = "20s"
 
 chain_id = 114
