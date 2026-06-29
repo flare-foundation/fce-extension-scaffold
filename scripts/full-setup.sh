@@ -41,6 +41,18 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# --- Auto-activate chain-specific env when --chain was passed explicitly ---
+# If --chain <name> was given and a .env.<name> exists, activate it (copy → .env)
+# BEFORE loading, so --chain actually switches chains. Put per-chain values in
+# .env.<name>; note this overwrites the active .env.
+if [[ -n "$CHAIN" && -f "$PROJECT_DIR/.env.$CHAIN" ]]; then
+    cp "$PROJECT_DIR/.env.$CHAIN" "$PROJECT_DIR/.env"
+    log "Activated .env.$CHAIN → .env"
+elif [[ -n "$CHAIN" && "$CHAIN" != "local" && ! -f "$PROJECT_DIR/.env.$CHAIN" ]]; then
+    warn "No .env.$CHAIN found — using the existing .env as-is, which may target a different chain."
+    warn "Create .env.$CHAIN (e.g. from .env.example) so '--chain $CHAIN' switches automatically."
+fi
+
 # --- Resolve chain (flag > env > legacy LOCAL_MODE) ---
 # Load .env first so user-set defaults are visible
 if [[ -f "$PROJECT_DIR/.env" ]]; then

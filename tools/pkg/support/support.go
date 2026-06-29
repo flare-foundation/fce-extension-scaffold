@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/fdc2/fdc2hub"
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/system"
+	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/extensiongovernance"
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/extensionmanager"
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/machinemanager"
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/ownerallowlist"
@@ -49,6 +50,7 @@ type Support struct {
 	TeeWalletKeyManager     *walletkeymanager.WalletKeyManager
 	TeeVerification         *verification.Verification
 	TeeExtensionRegistry    *extensionmanager.ExtensionManager
+	TeeExtensionGovernance  *extensiongovernance.ExtensionGovernance
 	TeeOwnerAllowlist       *ownerallowlist.OwnerAllowlist
 
 	Addresses *Addresses
@@ -161,6 +163,11 @@ func NewSupport(prv *ecdsa.PrivateKey, chainClient *ethclient.Client, addresses 
 		return nil, err
 	}
 
+	teg, err := extensiongovernance.NewExtensionGovernance(diamond, chainClient)
+	if err != nil {
+		return nil, err
+	}
+
 	chainID, err := chainClient.ChainID(context.Background())
 	if err != nil {
 		return nil, err
@@ -179,6 +186,7 @@ func NewSupport(prv *ecdsa.PrivateKey, chainClient *ethclient.Client, addresses 
 		ChainClient:             chainClient,
 		ChainID:                 chainID,
 		TeeOwnerAllowlist:       toal,
+		TeeExtensionGovernance:  teg,
 		Addresses:               addresses,
 	}, nil
 }

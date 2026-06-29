@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
+	csigning "github.com/flare-foundation/go-flare-common/pkg/signing"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -67,7 +68,16 @@ func TeeProxyId(teeInfo *types.SignedTeeInfoResponse) (common.Address, common.Ad
 	if err != nil {
 		return common.Address{}, common.Address{}, errors.Errorf("%s", err)
 	}
-	proxyPubKey, err := crypto.SigToPub(accounts.TextHash(hash), teeInfo.ProxySignature)
+	// The proxy signs the TEE info over a domain-separated, chain-ID-bound
+	// payload (Payload{ProxyTeeInfo, chainID, infoHash}) — see tee-proxy
+	// external.go. Recover the proxy address over the SAME preimage, or the
+	// proxyId comes out garbage and the on-chain availability check is rejected
+	// by the verifier with "proxy signer does not match".
+	infoSignHash, err := csigning.NewPayload(csigning.ProxyTeeInfo, teeInfo.TeeInfo.ChainID, common.BytesToHash(hash)).Hash()
+	if err != nil {
+		return common.Address{}, common.Address{}, errors.Errorf("%s", err)
+	}
+	proxyPubKey, err := crypto.SigToPub(accounts.TextHash(infoSignHash[:]), teeInfo.ProxySignature)
 	if err != nil {
 		return common.Address{}, common.Address{}, errors.Errorf("%s", err)
 	}

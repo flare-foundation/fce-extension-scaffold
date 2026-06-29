@@ -320,33 +320,33 @@ func RegisterRegistrationChecks(
 
 	callOpts := &bind.CallOpts{Context: context.Background()}
 
-	// R1: Check extensions counter.
+	// R1: Check next public extension id (formerly extensions counter).
 	var counter *big.Int
 	if registry != nil && client != nil {
-		counter, err = registry.ExtensionsCounter(callOpts)
+		counter, err = registry.NextPublicExtensionId(callOpts)
 		if err != nil {
 			r.Add(CheckResult{
 				Step:    "register",
 				ID:      "R1",
-				Name:    "extensions counter",
+				Name:    "next public extension id",
 				Status:  FAIL,
-				Message: fmt.Sprintf("failed to query extensions counter: %v", err),
+				Message: fmt.Sprintf("failed to query nextPublicExtensionId: %v", err),
 			})
 		} else if counter.Sign() == 0 {
 			r.Add(CheckResult{
 				Step:    "register",
 				ID:      "R1",
-				Name:    "extensions counter",
+				Name:    "next public extension id",
 				Status:  WARN,
-				Message: "extensions counter is 0 — no extensions registered yet",
+				Message: "nextPublicExtensionId is 0 — no public extensions registered yet",
 			})
 		} else {
 			r.Add(CheckResult{
 				Step:    "register",
 				ID:      "R1",
-				Name:    "extensions counter",
+				Name:    "next public extension id",
 				Status:  PASS,
-				Message: fmt.Sprintf("%s extension(s) registered", counter.String()),
+				Message: fmt.Sprintf("nextPublicExtensionId = %s", counter.String()),
 			})
 		}
 	}

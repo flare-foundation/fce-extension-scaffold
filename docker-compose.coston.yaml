@@ -15,6 +15,10 @@ services:
   extension-tee:
     environment:
       - CHAIN_URL=${CHAIN_URL:-https://coston-api.flare.network/ext/C/rpc}
+      # Coston chain id. The node binds every signature to this value; it must
+      # match the proxy's chain_id and the on-chain registry, or signature
+      # verification fails (InvalidTeePublicKeyOrSignature / proxy panic).
+      - CHAIN_ID=${CHAIN_ID:-16}
 
 networks:
   default:
