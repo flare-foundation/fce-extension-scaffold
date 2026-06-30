@@ -129,6 +129,16 @@ func RegisterNode(s *support.Support, teeInfo *types.SignedTeeInfoResponse, host
 			logger.Infof("FTDC availability check already completed, skipping (from state file)")
 			instructionID = state.InstructionID
 		} else {
+			// Pre-flight: the availability check relies on the FTDC proxy's data
+			// providers cosigning an instruction tied to the current signing policy.
+			// If the proxy's signing policy is out of sync with the on-chain reward
+			// epoch, that cosign is rejected with 404 "no round" and the FDC proof
+			// never materializes. Fail fast here with a clear message instead of
+			// after a wasted on-chain tx + ~30s of polling.
+			if err := CheckFTDCProxyPolicyConsistency(s, ftdcTeeURL); err != nil {
+				return err
+			}
+
 			instructionID, err = RequestFTDCAvailabilityCheck(s, teeID, ftdcTee, teeAttestInstructionID)
 			if err != nil {
 				return err
