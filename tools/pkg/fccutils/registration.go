@@ -213,7 +213,21 @@ func PreRegistration(
 	claimBackAddress := crypto.PubkeyToAddress(s.Prv.PublicKey)
 	tx, err := s.TeeMachineRegistry.Register(opts, teeMachineDataRegistry, signature, proxyID, hostURL, claimBackAddress)
 	if err != nil {
-		return [32]byte{}, common.Hash{}, errors.Errorf("error: %s", err)
+		reason := DecodeRevertReason(err)
+		if parsed, abiErr := machinemanager.MachineManagerMetaData.GetAbi(); abiErr == nil {
+			if callData, packErr := parsed.Pack("register", teeMachineDataRegistry, signature, proxyID, hostURL, claimBackAddress); packErr == nil {
+				raw := SimulateAndDecodeRevert(s.ChainClient, claimBackAddress, s.Addresses.FlareTeeManager, opts.Value, callData)
+				if named := MatchCustomError(parsed, raw); named != "" {
+					reason = named
+				} else if reason == "" {
+					reason = raw
+				}
+			}
+		}
+		if reason == "" {
+			reason = err.Error()
+		}
+		return [32]byte{}, common.Hash{}, errors.Errorf("register() reverted: %s", reason)
 	}
 
 	receipt, err := support.CheckTx(tx, s.ChainClient)

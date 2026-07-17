@@ -1,9 +1,11 @@
 package fccutils
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 
@@ -75,6 +77,32 @@ func SimulateAndDecodeRevert(
 		return decodeRevertHex(hex.EncodeToString(result))
 	}
 
+	return ""
+}
+
+// MatchCustomError maps a raw revert payload (as returned by
+// SimulateAndDecodeRevert for undecodable reverts, e.g. "0xabcdef12...") to the
+// custom error name declared in parsedABI whose 4-byte selector matches. If the
+// error carries arguments they are appended, e.g. "InvalidGovernanceHash(0x..)".
+// Returns "" when no error in the ABI matches the selector.
+func MatchCustomError(parsedABI *abi.ABI, revertHex string) string {
+	revertHex = strings.TrimPrefix(revertHex, "0x")
+	data, err := hex.DecodeString(revertHex)
+	if err != nil || len(data) < 4 {
+		return ""
+	}
+	selector := data[:4]
+	for name, e := range parsedABI.Errors {
+		if !bytes.Equal(e.ID.Bytes()[:4], selector) {
+			continue
+		}
+		if vals, uerr := e.Unpack(data); uerr == nil {
+			if argStr := fmt.Sprintf("%v", vals); argStr != "[]" && argStr != "<nil>" {
+				return name + argStr
+			}
+		}
+		return name
+	}
 	return ""
 }
 
