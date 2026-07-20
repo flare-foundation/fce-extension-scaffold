@@ -100,15 +100,13 @@ if [[ "$USE_LOCAL" == "false" ]]; then
         if ! docker image inspect local/tee-proxy >/dev/null 2>&1; then
             TEE_ROOT="$(cd "$PROJECT_DIR/../.." && pwd)"
             TEE_PROXY_DIR="$TEE_ROOT/tee-proxy"
-            TEE_NODE_DIR="$TEE_ROOT/tee-node"
             if [[ ! -d "$TEE_PROXY_DIR" ]]; then
                 die "Image local/tee-proxy not found and tee-proxy repo not present at $TEE_PROXY_DIR.\n  Either set REGISTRY in .env to pull from a remote registry, or clone the tee-proxy repo into $TEE_ROOT/."
             fi
-            if [[ ! -d "$TEE_NODE_DIR" ]]; then
-                die "Image local/tee-proxy not found and tee-node repo not present at $TEE_NODE_DIR.\n  The tee-proxy Dockerfile requires tee-node as a build dependency. Clone tee-node into $TEE_ROOT/."
-            fi
+            # tee-proxy builds self-contained: tee-node is a normal module dependency
+            # (fetched via `go mod download`), so the build context is tee-proxy/ itself.
             log "Building local/tee-proxy image from $TEE_PROXY_DIR..."
-            docker build -f "$TEE_PROXY_DIR/Dockerfile" -t local/tee-proxy "$TEE_ROOT" || die "Failed to build tee-proxy image"
+            docker build -f "$TEE_PROXY_DIR/Dockerfile" -t local/tee-proxy "$TEE_PROXY_DIR" || die "Failed to build tee-proxy image"
             log "local/tee-proxy image built successfully"
         else
             log "local/tee-proxy image already exists (use 'docker rmi local/tee-proxy' to force rebuild)"

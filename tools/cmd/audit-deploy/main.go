@@ -104,9 +104,9 @@ func main() {
 			fmt.Printf("    %s   %q\n", common.Hash(p).Hex(), bytes32ToString(p))
 		}
 	}
-	cnt, cerr := er.ExtensionsCounter(opts)
+	cnt, cerr := er.NextPublicExtensionId(opts)
 	if cerr == nil {
-		fmt.Printf("  extensionsCounter: %s\n", cnt.String())
+		fmt.Printf("  nextPublicExtensionId: %s\n", cnt.String())
 	}
 
 	if *extID >= 0 {
@@ -148,7 +148,12 @@ func replayAddTeeVersion(cc *ethclient.Client, to, from common.Address, extID *b
 		fmt.Printf("  load ABI: %v\n", err)
 		return
 	}
-	calldata, err := emABI.Pack("addTeeVersion", extID, version, codeHash, [][32]byte{platform}, common.Hash{})
+	versionBytes, verr := stringToBytes32(version)
+	if verr != nil {
+		fmt.Printf("  version: %v\n", verr)
+		return
+	}
+	calldata, err := emABI.Pack("addTeeVersion", extID, versionBytes, codeHash, [][32]byte{platform})
 	if err != nil {
 		fmt.Printf("  pack: %v\n", err)
 		return
@@ -213,6 +218,17 @@ func extractRevertData(err error) []byte {
 		}
 	}
 	return nil
+}
+
+// stringToBytes32 packs an ASCII string into a bytes32, left-aligned and
+// zero-padded on the right (inverse of bytes32ToString).
+func stringToBytes32(s string) ([32]byte, error) {
+	var b [32]byte
+	if len(s) > 32 {
+		return b, fmt.Errorf("value %q exceeds 32 bytes", s)
+	}
+	copy(b[:], s)
+	return b, nil
 }
 
 func bytes32ToString(b [32]byte) string {

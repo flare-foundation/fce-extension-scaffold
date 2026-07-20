@@ -81,7 +81,15 @@ func RegisterNode(s *support.Support, teeInfo *types.SignedTeeInfoResponse, host
 			callOpts := &bind.CallOpts{Context: context.Background()}
 			machineInfo, machineErr := s.TeeMachineRegistry.GetTeeMachine(callOpts, teeID)
 			if machineErr == nil && machineInfo.TeeId != (common.Address{}) {
-				logger.Infof("TEE machine %s already registered on-chain, skipping pre-registration", teeID.Hex())
+				// Already registered (e.g. a re-run): skip machine pre-registration,
+				// but the original attestation challenge is one-shot and may have
+				// expired, so request a FRESH attestation to get a valid challenge —
+				// otherwise the availability check below reverts with ChallengeExpired.
+				logger.Infof("TEE machine %s already registered on-chain, requesting fresh attestation", teeID.Hex())
+				teeAttestInstructionID, err = RequestTeeAttestation(s, teeID)
+				if err != nil {
+					return err
+				}
 			} else {
 				_, teeAttestInstructionID, err = PreRegistration(s, hostURL, teeID, proxyID, teeInfo)
 				if err != nil {
@@ -121,6 +129,16 @@ func RegisterNode(s *support.Support, teeInfo *types.SignedTeeInfoResponse, host
 			logger.Infof("FTDC availability check already completed, skipping (from state file)")
 			instructionID = state.InstructionID
 		} else {
+			// Pre-flight: the availability check relies on the FTDC proxy's data
+			// providers cosigning an instruction tied to the current signing policy.
+			// If the proxy's signing policy is out of sync with the on-chain reward
+			// epoch, that cosign is rejected with 404 "no round" and the FDC proof
+			// never materializes. Fail fast here with a clear message instead of
+			// after a wasted on-chain tx + ~30s of polling.
+			if err := CheckFTDCProxyPolicyConsistency(s, ftdcTeeURL); err != nil {
+				return err
+			}
+
 			instructionID, err = RequestFTDCAvailabilityCheck(s, teeID, ftdcTee, teeAttestInstructionID)
 			if err != nil {
 				return err
@@ -172,12 +190,19 @@ func PreRegistration(
 		CodeHash:     teeInfo.MachineData.CodeHash,
 		Platform:     teeInfo.MachineData.Platform,
 		PublicKey:    machinemanager.PublicKey{X: teeInfo.MachineData.PublicKey.X, Y: teeInfo.MachineData.PublicKey.Y},
+		// Must carry the node's governanceHash: register() verifies the TEE
+		// signature over keccak(abi.encode(machineData)) including this field,
+		// so a zero value here would fail with InvalidTeePublicKeyOrSignature.
+		GovernanceHash: teeInfo.MachineData.GovernanceHash,
 	}
 
 	if len(teeInfo.DataSignature) != 65 {
 		return [32]byte{}, common.Hash{}, errors.New("signature error")
 	}
-	sigVRS := encoding.TransformSignatureRSVtoVRS(teeInfo.DataSignature)
+	sigVRS, err := encoding.TransformSignatureRSVtoVRS(teeInfo.DataSignature)
+	if err != nil {
+		return [32]byte{}, common.Hash{}, errors.Errorf("%s", err)
+	}
 
 	signature := machinemanager.Signature{
 		V: sigVRS[0],
@@ -188,7 +213,21 @@ func PreRegistration(
 	claimBackAddress := crypto.PubkeyToAddress(s.Prv.PublicKey)
 	tx, err := s.TeeMachineRegistry.Register(opts, teeMachineDataRegistry, signature, proxyID, hostURL, claimBackAddress)
 	if err != nil {
-		return [32]byte{}, common.Hash{}, errors.Errorf("error: %s", err)
+		reason := DecodeRevertReason(err)
+		if parsed, abiErr := machinemanager.MachineManagerMetaData.GetAbi(); abiErr == nil {
+			if callData, packErr := parsed.Pack("register", teeMachineDataRegistry, signature, proxyID, hostURL, claimBackAddress); packErr == nil {
+				raw := SimulateAndDecodeRevert(s.ChainClient, claimBackAddress, s.Addresses.FlareTeeManager, opts.Value, callData)
+				if named := MatchCustomError(parsed, raw); named != "" {
+					reason = named
+				} else if reason == "" {
+					reason = raw
+				}
+			}
+		}
+		if reason == "" {
+			reason = err.Error()
+		}
+		return [32]byte{}, common.Hash{}, errors.Errorf("register() reverted: %s", reason)
 	}
 
 	receipt, err := support.CheckTx(tx, s.ChainClient)
@@ -350,13 +389,29 @@ func ToProduction(s *support.Support, toProductionProof *machinemanager.ITeeAvai
 	return nil
 }
 
-func AddTeeVersion(s *support.Support, privKey *ecdsa.PrivateKey, extensionId *big.Int, codeHash common.Hash, platform common.Hash, governanceHash common.Hash, version string) error {
+// stringToBytes32 packs an ASCII string into a bytes32, left-aligned and
+// zero-padded on the right. Errors if the string exceeds 32 bytes.
+func stringToBytes32(s string) ([32]byte, error) {
+	var b [32]byte
+	if len(s) > 32 {
+		return b, errors.Errorf("version %q exceeds 32 bytes", s)
+	}
+	copy(b[:], s)
+	return b, nil
+}
+
+func AddTeeVersion(s *support.Support, privKey *ecdsa.PrivateKey, extensionId *big.Int, codeHash common.Hash, platform common.Hash, version string) error {
 	opts, err := bind.NewKeyedTransactorWithChainID(privKey, s.ChainID)
 	if err != nil {
 		return errors.Errorf("%s", err)
 	}
 
-	tx, err := s.TeeExtensionRegistry.AddTeeVersion(opts, extensionId, version, codeHash, [][32]byte{platform}, governanceHash)
+	versionBytes, err := stringToBytes32(version)
+	if err != nil {
+		return err
+	}
+
+	tx, err := s.TeeExtensionRegistry.AddTeeVersion(opts, extensionId, versionBytes, codeHash, [][32]byte{platform})
 	if err != nil {
 		return errors.Errorf("TeeExtensionRegistry.AddTeeVersion failed: %s", err)
 	}

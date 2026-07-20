@@ -71,9 +71,34 @@ A working Hello World example for building Flare Confidential Compute (FCC) exte
 | `TYPES_SERVER_PORT` | `8100` | Types server HTTP port |
 | `EXTENSION_OWNER_KEY` | (empty, falls back to `DEPLOYMENT_PRIVATE_KEY`) | Private key override for AddTeeVersion |
 | `TEE_VERSION` | `v0.1.0` | Version string for TEE registration |
+| `GOVERNANCE_SIGNERS` | `INITIAL_OWNER` (deployer) | Comma-separated 0x addresses that govern this extension's TEE machines |
+| `GOVERNANCE_THRESHOLD` | `1` | Minimum distinct governance signatures required |
 | `LOCAL_MODE` | `true` | Skip attestation in local dev |
 | `WAIT_TIMEOUT` | `120` | Service wait timeout in seconds |
 | `INSTRUCTION_SENDER` | from `config/extension.env` | InstructionSender contract address (test) |
+
+### TEE governance
+
+Every TEE machine registers under a **governance** — a set of signer addresses
+and a threshold that authorize governance actions for the extension (e.g.
+machine-path-list updates). Two parties must agree on this set, or `register-tee`
+reverts with `InvalidGovernanceHash`:
+
+- the **TEE node**, which signs its machine data with a `governanceHash` derived
+  from `(signers, threshold)`, and
+- the **on-chain registry**, where the governance is registered.
+
+The scaffold keeps them consistent by reading both from one place — your `.env`:
+
+```bash
+GOVERNANCE_SIGNERS="0xAbc...,0xDef..."   # comma-separated 0x addresses
+GOVERNANCE_THRESHOLD=2
+```
+
+If unset, both default to **the deployer (`INITIAL_OWNER`) as the sole signer,
+threshold 1** — fine for development. During `post-build`, the `set-governance`
+step registers the set on-chain (idempotently) before `register-tee`, and the
+same values are passed to the node container via Docker Compose.
 
 ## Prerequisites
 
@@ -395,7 +420,7 @@ docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml logs -f ext
 ./scripts/post-build.sh
 ```
 
-This registers the TEE version and TEE machine on-chain. It reads `EXT_PROXY_URL` and `NORMAL_PROXY_URL` from your `.env`, so make sure ngrok is running and the URL is correct.
+This allows the TEE version, registers the extension's TEE **governance** (see [TEE governance](#tee-governance)), and registers the TEE machine on-chain. It reads `EXT_PROXY_URL` and `NORMAL_PROXY_URL` from your `.env`, so make sure ngrok is running and the URL is correct.
 
 ### 7. Test
 

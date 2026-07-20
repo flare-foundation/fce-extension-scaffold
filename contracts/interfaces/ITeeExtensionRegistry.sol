@@ -19,7 +19,7 @@ interface ITeeExtensionRegistry {
         TeeInstructionParams calldata _instructionParams
     ) external payable returns (bytes32 _instructionId);
 
-    function extensionsCounter() external view returns (uint256);
+    function nextPublicExtensionId() external view returns (uint256);
 
     function getTeeExtensionInstructionsSender(uint256 _extensionId)
         external view returns (address);
