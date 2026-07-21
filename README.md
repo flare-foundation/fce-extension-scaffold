@@ -256,7 +256,7 @@ cd tools && go run ./cmd/register-tee \
 
 ### Docker Compose details
 
-The `docker-compose.yaml` uses `build.context: ../..` (resolving to `tee/`) so the Dockerfile can access both `tee-node/` and `extensions/extension-scaffold/` for the Go build.
+The `docker-compose.yaml` uses `build.context: .` — the build is self-contained: `go.mod` pins `tee-node` and it is fetched from the network (verified against `go.sum`), so no sibling `tee-node/` checkout is needed. To build the node + proxy from on-disk sibling checkouts instead (while developing `tee-node`/`tee-proxy`), run `USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh`, which selects `Dockerfile.siblings` (build context `tee/`) via `docker-compose.siblings.yaml`.
 
 To rebuild the extension image after code changes:
 ```bash

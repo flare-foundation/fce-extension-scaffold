@@ -1,10 +1,8 @@
-# Default node build: self-contained and reproducible. Build context is this extension dir.
-# The extension module pins github.com/flare-foundation/tee-node to a released version in go.mod
-# and fetches it from the network (verified against go.sum) — no on-disk sibling repo or replace
-# directive is needed, so only the module's own sources are copied into the build.
-#
-# To build against an on-disk sibling tee-node instead (while developing it), use
-# `USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh`, which selects ./Dockerfile.siblings.
+# Local-siblings node build — opt-in via `USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh`.
+# Build context is tee/ (the parent of both tee-node/ and extension-examples/) so the on-disk
+# sibling tee-node can be compiled into the node instead of the pinned module version. This file
+# is selected through docker-compose.siblings.yaml; the default reproducible, self-contained,
+# pinned build lives in ./Dockerfile.
 
 # pin base image by digest so every build starts from the same bytes
 FROM golang:1.25.1-trixie@sha256:ff83f3762390c2cccb53618ccc18af23e556aff9b1db4428637e9f63287c8171 AS builder
@@ -35,23 +33,26 @@ RUN \
   : "Clean up for improving reproducibility (optional)" && \
   rm -rf /var/log/* /var/cache/ldconfig/aux-cache
 
-# Copy only the module manifest first so `go mod download` is cached independently of source edits.
-# tee-node and every other dependency are fetched from the network during download.
-COPY --chmod=644 --chown=0:0 go.mod go.sum ./
-RUN go mod download
-RUN go mod verify
+# bring in both modules; tee-node sits next to extension-scaffold so the replace directive resolves
+# explicit chmod/chown on COPY so file metadata does not depend on host umask or ownership
+COPY --chmod=644 --chown=0:0 tee-node/ ./tee-node/
+COPY --chmod=644 --chown=0:0 extension-examples/extension-scaffold/ ./extension-examples/extension-scaffold/
 
-# Copy the module's own source packages (cmd/docker is the node entrypoint).
-COPY --chmod=644 --chown=0:0 cmd/ ./cmd/
-COPY --chmod=644 --chown=0:0 internal/ ./internal/
-COPY --chmod=644 --chown=0:0 pkg/ ./pkg/
+WORKDIR /build/extension-examples/extension-scaffold
+
+# The committed go.mod pins tee-node to a released version (see ./Dockerfile); point it at the
+# on-disk sibling for this dev build. -mod=mod lets go reconcile go.sum against the sibling's
+# dependency tree in-layer without mutating the committed go.sum on the host.
+RUN go mod edit -replace github.com/flare-foundation/tee-node=../../tee-node
+
+RUN GOFLAGS=-mod=mod go mod download
 
 # -trimpath strips build-host paths from the binary
 # -buildid= clears go's non-deterministic build id
 # -s -w drop symbol and dwarf tables, which contain build-time data
 # -buildvcs=false omits embedded vcs metadata
 # CGO_ENABLED=0 produces a static binary, avoiding link-time libc variance
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS="-buildvcs=false" \
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS="-buildvcs=false -mod=mod" \
     go build -trimpath -ldflags="-buildid= -s -w" -o /app/extension-tee ./cmd/docker
 
 # NOTE: buildkit's rewrite-timestamp only clamps mtimes down to SOURCE_DATE_EPOCH (moby/buildkit#3180)

@@ -1,0 +1,12 @@
+# Overlay selected by `USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh`.
+# It swaps the default self-contained, pinned node build (context ., ./Dockerfile)
+# for the sibling-based build (context tee/, ./Dockerfile.siblings) so an on-disk
+# tee-node checkout is compiled into the node instead of the pinned module version.
+#
+# Not chain-specific — start-services.sh attaches it after docker-compose.yaml and
+# before any coston/coston2 overlay.
+services:
+  extension-tee:
+    build:
+      context: ../..
+      dockerfile: extension-examples/extension-scaffold/Dockerfile.siblings

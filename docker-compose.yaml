@@ -23,8 +23,8 @@ services:
 
   extension-tee:
     build:
-      context: ../..
-      dockerfile: extension-examples/extension-scaffold/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       args:
         SOURCE_DATE_EPOCH: ${SOURCE_DATE_EPOCH}
     env_file:

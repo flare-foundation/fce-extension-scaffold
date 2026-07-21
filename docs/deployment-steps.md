@@ -11,17 +11,33 @@ Linear recipe to deploy a TEE extension to Flare Coston or Coston2. Run the step
 - Bash (Git Bash on Windows works)
 - VPN access to Flare's indexer DB (`35.241.249.150:3306`)
 
-## 1. Clone sibling repos
+## 1. Get the extension repo
 
-The extension's Dockerfiles consume both repos from `../../tee-node/`.
+The default build is **self-contained**: `go.mod` pins `tee-node` and
+`proxy/Dockerfile` pins `tee-proxy`, both fetched from the network at build
+time. You only need this repo — no sibling `tee-node/` or `tee-proxy/`
+checkouts.
 
 ```text
-<workspace>/tee/
-├── tee-node/         # gitlab.com/flarenetwork/tee/tee-node, tag v0.0.20
-├── tee-proxy/        # gitlab.com/flarenetwork/tee/tee-proxy, tag v0.0.17
-└── extensions/
-    └── <your-extension>/
+<workspace>/
+└── <your-extension>/     # this repo — builds standalone
 ```
+
+> **Developing `tee-node`/`tee-proxy` locally?** Place them as siblings and use
+> the opt-in toggle, which builds the node + proxy from your on-disk checkouts
+> instead of the pinned versions:
+>
+> ```text
+> <workspace>/tee/
+> ├── tee-node/         # github.com/flare-foundation/tee-node
+> ├── tee-proxy/        # github.com/flare-foundation/tee-proxy
+> └── extension-examples/
+>     └── <your-extension>/
+> ```
+>
+> ```bash
+> USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh --chain coston2
+> ```
 
 ## 2. Generate a funded deployer key
 

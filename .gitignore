@@ -12,6 +12,11 @@ out/
 cache/
 .DS_Store
 
+# go.work is generated on demand by start-services.sh for USE_LOCAL_SIBLINGS=1
+# (points host builds at sibling tee-node / tee-proxy). Never committed.
+go.work
+go.work.sum
+
 # Compiled Go binaries
 tools/start-*
 tools/allow-*
