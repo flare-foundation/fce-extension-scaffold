@@ -24,11 +24,17 @@ they are built.
 
 ## Build context
 
-The build context must be the parent `tee/` directory, not the
-`extension-scaffold/` directory itself. This is because `go.mod` declares
-`replace github.com/flare-foundation/tee-node => ../../tee-node`, so the
-builder needs both `tee-node/` and `extension-examples/extension-scaffold/`
-visible side-by-side.
+The default build is self-contained: the build context is the extension
+directory itself (`docker-compose.yaml` sets `context: .`, `dockerfile:
+Dockerfile`). `go.mod` pins `github.com/flare-foundation/tee-node` to a released
+version and fetches it from the network (verified against `go.sum`), so the
+build needs only this repo's own sources — no sibling `tee-node/` checkout.
+
+> **Developing `tee-node`/`tee-proxy` locally?** Run
+> `USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh`, which builds from on-disk
+> sibling checkouts via `Dockerfile.siblings` (build context `tee/`). That path
+> is for local iteration only — it uses whatever is checked out and is **not**
+> reproducible.
 
 ## Verifying a remote image
 
@@ -42,23 +48,21 @@ Create the builder (one-time setup):
 docker buildx create --driver=docker-container --name=moby-buildkit --driver-opt image=moby/buildkit --bootstrap
 ```
 
-Clone the repositories so `tee-node/` and `extension-examples/` sit next to
-each other under a shared parent (matches the layout the Dockerfile expects):
+Clone the extension repository (self-contained — no sibling `tee-node/` needed;
+the pinned module is fetched from the network at build time):
 
 ```sh
-mkdir tee && cd tee
-git clone https://github.com/flare-foundation/tee-node.git
 git clone https://github.com/flare-foundation/extension-examples.git
 ```
 
 Checkout the tag you want to verify, build locally, and compare the image ID
-against the registry image. Run from `tee/extension-examples/extension-scaffold/`:
+against the registry image. Run from `extension-examples/extension-scaffold/`:
 
 ```sh
 TAG=$(git describe --tags --abbrev=0)
 git checkout "$TAG"
 
-docker buildx build --builder moby-buildkit --platform linux/amd64 --no-cache --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) --output "type=docker,rewrite-timestamp=true" -t local/extension-scaffold:verify --load -f Dockerfile ../..
+docker buildx build --builder moby-buildkit --platform linux/amd64 --no-cache --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) --output "type=docker,rewrite-timestamp=true" -t local/extension-scaffold:verify --load -f Dockerfile .
 
 docker pull --platform linux/amd64 ghcr.io/flare-foundation/extension-scaffold:"$TAG"
 
