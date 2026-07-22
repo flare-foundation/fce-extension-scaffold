@@ -77,16 +77,18 @@ ADDRESSES_FILE="$(cd "$(dirname "$ADDRESSES_FILE")" && pwd)/$(basename "$ADDRESS
 log "Chain URL:      $CHAIN_URL"
 log "Addresses file: $ADDRESSES_FILE"
 
-# --- Step 0: Pre-flight check ---
-step 0 "Pre-flight check"
+# --- Step 0: Generate Go bindings from Solidity contract ---
+# Must run before the pre-flight check: the tools module imports the generated
+# bindings, so on a fresh clone nothing in tools/ compiles until they exist.
+step 0 "Generate Go bindings"
+"$SCRIPT_DIR/generate-bindings.sh" || die "Binding generation failed"
+
+# --- Step 1: Pre-flight check ---
+step 1 "Pre-flight check"
 cd "$PROJECT_DIR/tools"
 if ! go run ./cmd/deploy-contract -a "$ADDRESSES_FILE" -c "$CHAIN_URL" --preflight-only 2>&1; then
     die "Pre-flight check failed — fix the issues above before deploying"
 fi
-
-# --- Step 1: Generate Go bindings from Solidity contract ---
-step 1 "Generate Go bindings"
-"$SCRIPT_DIR/generate-bindings.sh" || die "Binding generation failed"
 
 # --- Step 2: Deploy InstructionSender ---
 step 2 "Deploy InstructionSender contract"
