@@ -11,13 +11,41 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/flare-foundation/go-flare-common/pkg/contracts/tee/machinemanager"
+
+	"extension-scaffold/tools/pkg/configs"
+	"extension-scaffold/tools/pkg/support"
 )
 
 func main() {
 	rpc := flag.String("rpc", "https://coston2-api.flare.network/ext/C/rpc", "rpc url")
-	reg := flag.String("reg", "0x5918Cd58e5caf755b8584649Aa24077822F87613", "TeeMachineRegistry address")
+	af := flag.String("a", configs.AddressesFile, "file with deployed addresses")
+	reg := flag.String("reg", "", "TeeMachineRegistry address (overrides -a; the registry is the FlareTeeManager diamond)")
 	listExt := flag.Int64("ext", -1, "list active TEEs in extension id (e.g. 0 for FTDC, 1588 for user)")
 	flag.Parse()
+
+	// Resolve the registry from the deployed-addresses file like every other tool,
+	// so a redeployed diamond is picked up automatically. A retired deployment still
+	// answers these calls with stale-but-plausible data, so a hardcoded default here
+	// is actively misleading; -reg stays available as an explicit override.
+	if *reg == "" {
+		// Same two-form handling as support.DefaultSupport: name-keyed object first,
+		// then the array-of-contracts layout used by the per-chain address files.
+		addr := &support.Addresses{}
+		if err := configs.ReadAddresses(*af, addr); err != nil {
+			parsed, perr := support.ParseAddresses(*af)
+			if perr != nil {
+				fmt.Fprintf(os.Stderr, "read addresses %q: %v\n(pass -a <deployed-addresses.json> or -reg <address>)\n", *af, perr)
+				os.Exit(1)
+			}
+			addr = parsed
+		}
+		if addr.FlareTeeManager == (common.Address{}) {
+			fmt.Fprintf(os.Stderr, "no FlareTeeManager address in %q; pass -reg <address>\n", *af)
+			os.Exit(1)
+		}
+		*reg = addr.FlareTeeManager.Hex()
+	}
+	fmt.Printf("registry: %s\n", *reg)
 
 	cc, err := ethclient.Dial(*rpc)
 	if err != nil {

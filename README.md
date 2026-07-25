@@ -451,6 +451,7 @@ docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml down
 
 ## Further Reading
 
+- [Troubleshooting](TROUBLESHOOTING.md) — registration failures, availability-check 404s, code-hash and version-skew errors
 - [Extension Development Guide](docs/extension-guide.md) — how the code works and how to add your own logic
 - [Types Server Guide](docs/types-server.md) — decoding instruction data, adding your own types, and the types-server API
 - [Making It Your Own](docs/manual-setup.md) — renaming from HelloWorld to your own extension
