@@ -10,9 +10,11 @@ import (
 const (
 	Version = "0.1.0"
 
-	OPTypeGreeting     = "GREETING"
-	OPCommandSayHello  = "SAY_HELLO"
-	OPCommandSayGoodbye = "SAY_GOODBYE"
+	OPTypePredictionMarket = "PREDICTION_MARKET"
+	OPCommandDeposit       = "DEPOSIT"
+	OPCommandPlaceBet      = "PLACE_BET"
+	OPCommandSettle        = "SETTLE"
+	OPCommandWithdraw      = "WITHDRAW"
 
 	TimeoutShutdown = 5 * time.Second
 )

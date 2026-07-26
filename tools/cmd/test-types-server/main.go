@@ -6,11 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"os"
 
 	"extension-scaffold/pkg/types"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/flare-foundation/go-flare-common/pkg/logger"
 	"github.com/flare-foundation/go-flare-common/pkg/tee/structs"
@@ -45,64 +47,65 @@ func main() {
 
 	// --- Success cases ---
 
-	run("SAY_HELLO message (JSON)", func() error {
-		data := hexutil.Encode([]byte(`{"name":"Alice"}`))
-		resp, err := postDecode(baseURL, decodeRequest{
-			OPType: "GREETING", OPCommand: "SAY_HELLO", Kind: "message", Data: data,
-		})
-		if err != nil {
-			return err
+	run("DEPOSIT message (ABI-encoded)", func() error {
+		req := types.DepositRequest{
+			Depositor: common.HexToAddress("0xed2B5717c9b936ecC76d75401026A99143e278F5"),
+			Amount:    big.NewInt(1000000),
 		}
-		return requireField(resp, "name", "Alice")
-	})
-
-	run("SAY_HELLO result (JSON)", func() error {
-		payload, _ := json.Marshal(map[string]any{"greeting": "Hello, Alice!", "greetingNumber": 1})
-		data := hexutil.Encode(payload)
-		resp, err := postDecode(baseURL, decodeRequest{
-			OPType: "GREETING", OPCommand: "SAY_HELLO", Kind: "result", Data: data,
-		})
-		if err != nil {
-			return err
-		}
-		if err := requireField(resp, "greeting", "Hello, Alice!"); err != nil {
-			return err
-		}
-		return requireFieldFloat(resp, "greetingNumber", 1)
-	})
-
-	run("SAY_GOODBYE message (ABI-encoded)", func() error {
-		req := types.SayGoodbyeRequest{Name: "Bob", Reason: "leaving"}
-		encoded, err := structs.Encode(types.SayGoodbyeMessageArg, req)
+		encoded, err := structs.Encode(types.DepositMessageArg, req)
 		if err != nil {
 			return fmt.Errorf("ABI encode: %w", err)
 		}
 		data := hexutil.Encode(encoded)
 		resp, err := postDecode(baseURL, decodeRequest{
-			OPType: "GREETING", OPCommand: "SAY_GOODBYE", Kind: "message", Data: data,
+			OPType: "PREDICTION_MARKET", OPCommand: "DEPOSIT", Kind: "message", Data: data,
 		})
 		if err != nil {
 			return err
 		}
-		if err := requireField(resp, "name", "Bob"); err != nil {
-			return err
-		}
-		return requireField(resp, "reason", "leaving")
+		return requireField(resp, "Depositor", "0xed2B5717c9b936ecC76d75401026A99143e278F5")
 	})
 
-	run("SAY_GOODBYE result (JSON)", func() error {
-		payload, _ := json.Marshal(map[string]any{"farewell": "Goodbye, Bob!", "farewellNumber": 1})
-		data := hexutil.Encode(payload)
+	run("SETTLE message (ABI-encoded)", func() error {
+		req := types.SettleRequest{
+			MarketId:       big.NewInt(0),
+			ContractAddr:   common.HexToAddress("0x072A3A0C04Cf8CDcaf5B4A73a4Ed4fF5A841531f"),
+			Outcome:        true,
+			ReferenceValue: big.NewInt(12345),
+		}
+		encoded, err := structs.Encode(types.SettleMessageArg, req)
+		if err != nil {
+			return fmt.Errorf("ABI encode: %w", err)
+		}
+		data := hexutil.Encode(encoded)
 		resp, err := postDecode(baseURL, decodeRequest{
-			OPType: "GREETING", OPCommand: "SAY_GOODBYE", Kind: "result", Data: data,
+			OPType: "PREDICTION_MARKET", OPCommand: "SETTLE", Kind: "message", Data: data,
 		})
 		if err != nil {
 			return err
 		}
-		if err := requireField(resp, "farewell", "Goodbye, Bob!"); err != nil {
+		return requireField(resp, "ContractAddr", "0x072A3A0C04Cf8CDcaf5B4A73a4Ed4fF5A841531f")
+	})
+
+	run("SETTLE result (ABI-encoded)", func() error {
+		req := types.SettleRequest{
+			MarketId:       big.NewInt(0),
+			ContractAddr:   common.HexToAddress("0x072A3A0C04Cf8CDcaf5B4A73a4Ed4fF5A841531f"),
+			Outcome:        false,
+			ReferenceValue: big.NewInt(99),
+		}
+		encoded, err := structs.Encode(types.SettleMessageArg, req)
+		if err != nil {
+			return fmt.Errorf("ABI encode: %w", err)
+		}
+		data := hexutil.Encode(encoded)
+		resp, err := postDecode(baseURL, decodeRequest{
+			OPType: "PREDICTION_MARKET", OPCommand: "SETTLE", Kind: "result", Data: data,
+		})
+		if err != nil {
 			return err
 		}
-		return requireFieldFloat(resp, "farewellNumber", 1)
+		return requireFieldFloat(resp, "ReferenceValue", 99)
 	})
 
 	// --- Error cases ---
@@ -115,19 +118,19 @@ func main() {
 
 	run("invalid kind → 400", func() error {
 		return expectStatus(baseURL, decodeRequest{
-			OPType: "GREETING", OPCommand: "SAY_HELLO", Kind: "invalid", Data: "0x7b7d",
+			OPType: "PREDICTION_MARKET", OPCommand: "DEPOSIT", Kind: "invalid", Data: "0x7b7d",
 		}, http.StatusBadRequest)
 	})
 
 	run("invalid hex → 400", func() error {
 		return expectStatus(baseURL, decodeRequest{
-			OPType: "GREETING", OPCommand: "SAY_HELLO", Kind: "message", Data: "not-hex",
+			OPType: "PREDICTION_MARKET", OPCommand: "DEPOSIT", Kind: "message", Data: "not-hex",
 		}, http.StatusBadRequest)
 	})
 
 	run("valid hex, bad payload → 422", func() error {
 		return expectStatus(baseURL, decodeRequest{
-			OPType: "GREETING", OPCommand: "SAY_HELLO", Kind: "message", Data: "0xdeadbeef",
+			OPType: "PREDICTION_MARKET", OPCommand: "DEPOSIT", Kind: "message", Data: "0xdeadbeef",
 		}, http.StatusUnprocessableEntity)
 	})
 
