@@ -12,9 +12,10 @@
 
 import { createECDH, createHash, createHmac, createCipheriv, randomBytes } from 'node:crypto';
 
-// TEE public key, from https://flare-tee.idolpulse.com/info -> machineData.publicKey
-// Verified against on-chain PredictionMarket.teeAddress() == 0x04BA567472B68fA3bdB04359E0Dd838b11378E55
-// via keccak256(x||y)[-20:] before use.
+// TEE public key is ephemeral — regenerated on every container restart.
+// Update TEE_PUBKEY_X and TEE_PUBKEY_Y by querying your TEE node's /info endpoint
+// before use. The values below were valid at the time of development but may no longer
+// match the current on-chain teeAddress().
 const TEE_PUBKEY_X = '2f195465b8219db4f61083e04116851bcdfff87d2abc593ca11994dee5930cac';
 const TEE_PUBKEY_Y = '598b70fcafeb55bf40aef7bed18b206c5eff6b4593278163d7182fd2b16752ad';
 
