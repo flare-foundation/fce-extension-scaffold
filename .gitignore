@@ -23,6 +23,7 @@ tools/allow-*
 tools/deploy-*
 tools/register-*
 tools/run-*
+tools/test-types-server
 
 # Generated contract bindings (produced by scripts/generate-bindings.sh)
 tools/pkg/contracts/*/autogen.go
