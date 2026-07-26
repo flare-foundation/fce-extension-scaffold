@@ -2,15 +2,20 @@
 # so no local sibling repos are needed.
 #
 # TEE_PROXY_VERSION MUST stay aligned with the extension's Go-module pins
-# (tools/go.mod): tee-proxy v0.0.18. tee-proxy's own go.mod transitively pins
-# the matching tee-node and go-flare-common line, so building it with
-# `go mod download` pulls the exact governance-aware node code the extension-tee
-# image uses — no separate tee-node clone or replace directive is needed.
+# (tools/go.mod): tee-proxy v0.0.19-0.20260722143739-8e114ac0ddf4 (develop tip).
+# tee-proxy's own go.mod transitively pins the matching tee-node and
+# go-flare-common line, so building it with `go mod download` pulls the exact
+# governance-aware node code the extension-tee image uses — no separate
+# tee-node clone or replace directive is needed.
 # Override via build arg when bumping both sides together.
+#
+# Pinned to the `develop` branch (not a tag): the Coston2 FCC redeploy on
+# 2026-07-22 requires a tee-node/tee-proxy fix that hasn't been tagged yet
+# (latest tag v0.0.19 predates it). Re-pin to a tag once one is cut.
 
-ARG TEE_PROXY_VERSION=v0.0.18
+ARG TEE_PROXY_VERSION=develop
 
-FROM golang:1.25.1-alpine AS builder
+FROM golang:1.25.8-alpine AS builder
 
 RUN apk add --no-cache git
 
