@@ -85,17 +85,18 @@ Clone the extension repository (self-contained — no sibling `tee-node/` needed
 the pinned module is fetched from the network at build time):
 
 ```sh
-git clone https://github.com/flare-foundation/extension-examples.git
+git clone https://github.com/flare-foundation/fce-extension-scaffold.git
+cd fce-extension-scaffold
 ```
 
 Checkout the tag you want to verify, build locally, and compare the image ID
-against the registry image. Run from `extension-examples/extension-scaffold/`:
+against the registry image. The Dockerfile lives under the language directory:
 
 ```sh
 TAG=$(git describe --tags --abbrev=0)
 git checkout "$TAG"
 
-docker buildx build --builder moby-buildkit --platform linux/amd64 --no-cache --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) --output "type=docker,rewrite-timestamp=true" -t local/extension-scaffold:verify --load -f Dockerfile .
+docker buildx build --builder moby-buildkit --platform linux/amd64 --no-cache --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) --output "type=docker,rewrite-timestamp=true" -t local/extension-scaffold:verify --load -f go/Dockerfile .
 
 docker pull --platform linux/amd64 ghcr.io/flare-foundation/extension-scaffold:"$TAG"
 
@@ -104,6 +105,34 @@ docker inspect --format='{{.Id}}' ghcr.io/flare-foundation/extension-scaffold:"$
 ```
 
 Both IDs should be identical.
+
+### Verifying the Python or TypeScript images
+
+`python/Dockerfile` and `typescript/Dockerfile` begin
+`FROM local/tee-node-base:${TEE_NODE_REF}`. That image is produced by
+`scripts/build-node-base.sh`, which uses plain `docker build` and therefore
+writes it to the **host** image store. The `docker-container` driver required
+above keeps its own isolated store and cannot see it, so the build fails to
+resolve the base image.
+
+Publish the base image to a throwaway local registry and point the build at it
+with `--build-context`:
+
+```sh
+docker run -d --rm -p 5000:5000 --name repro-registry registry:2
+
+./scripts/build-node-base.sh
+docker tag  local/tee-node-base:"$TEE_NODE_REF" localhost:5000/tee-node-base:"$TEE_NODE_REF"
+docker push localhost:5000/tee-node-base:"$TEE_NODE_REF"
+
+docker buildx build --builder moby-buildkit --platform linux/amd64 --no-cache   --build-arg SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)   --build-context local/tee-node-base:"$TEE_NODE_REF"=docker-image://localhost:5000/tee-node-base:"$TEE_NODE_REF"   --output "type=docker,rewrite-timestamp=true"   -t local/extension-scaffold:verify --load -f python/Dockerfile .
+
+docker stop repro-registry
+```
+
+Per the table above, Python and TypeScript remain same-machine only: a matching
+digest here confirms your own build is deterministic, not that an auditor on
+other hardware will reproduce the published hash.
 
 ## Upstream references
 
