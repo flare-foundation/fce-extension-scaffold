@@ -380,7 +380,5 @@ Example weights:
 
 ## Design Spec & Plan
 
-- **Design:** `docs/superpowers/specs/2026-04-11-autonomous-testing-agent-design.md`
-- **Implementation plan:** `docs/superpowers/plans/2026-04-11-autonomous-testing-agent.md`
 - **Edge case reference:** `notes/EXTENSION-DEPLOYMENT-EDGE-CASES.md`
 - **Stability audit:** `notes/EDGE-CASES-AND-STABILITY-AUDIT.md`
