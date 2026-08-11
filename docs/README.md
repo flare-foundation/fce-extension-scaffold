@@ -5,14 +5,14 @@ Standard layout shared by every FCC extension example. Validate with
 
 ## Required — every extension has these
 
-| Doc | Answers |
-|---|---|
-| [getting-started.md](getting-started.md) | run it locally, end to end |
-| [deployment-steps.md](deployment-steps.md) | deploy to Coston2 and operate it |
-| [testing.md](testing.md) | test suites and what they cover |
-| [testing-against-coston2.md](testing-against-coston2.md) | test against a deployed extension |
-| [architecture.md](architecture.md) | how this extension works |
-| [cloudflared.md](cloudflared.md) | expose a local proxy for testnet registration |
+| Doc                                                      | Answers                                       |
+| -------------------------------------------------------- | --------------------------------------------- |
+| [getting-started.md](getting-started.md)                 | run it locally, end to end                    |
+| [deployment-steps.md](deployment-steps.md)               | deploy to Coston2 and operate it              |
+| [testing.md](testing.md)                                 | test suites and what they cover               |
+| [testing-against-coston2.md](testing-against-coston2.md) | test against a deployed extension             |
+| [architecture.md](architecture.md)                       | how this extension works                      |
+| [cloudflared.md](cloudflared.md)                         | expose a local proxy for testnet registration |
 
 `deployment-steps.md` must cover the platform-wide traps, because they are not
 obvious and every extension hits them:
