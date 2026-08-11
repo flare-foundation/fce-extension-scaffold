@@ -83,67 +83,6 @@ The repo splits into a **language-neutral spine** (contracts, deployment tooling
 
 `tools/` is deliberately independent of every language implementation, which is what lets one deployment and test path serve all of them.
 
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `ADDRESSES_FILE` | auto-detected | Path to `deployed-addresses.json` |
-| `CHAIN_URL` | `http://127.0.0.1:8545` | Chain RPC endpoint |
-| `DEPLOYMENT_PRIVATE_KEY` | Hardhat dev key | Funded private key for transactions |
-| `PROXY_PRIVATE_KEY` | Hardhat dev key | Proxy signing key (used by start-services) |
-| `EXTENSION_ID` | from `config/extension.env` | Extension ID (bytes32 hex, set by pre-build) |
-| `INITIAL_OWNER` | derived from `DEPLOYMENT_PRIVATE_KEY` | Initial contract owner address |
-| `EXT_PROXY_URL` | `http://localhost:6674` | Extension proxy URL (post-build, test) |
-| `NORMAL_PROXY_URL` | `http://localhost:6662` | Normal/FTDC proxy URL (post-build) |
-| `EXTENSION_OWNER_KEY` | (empty, falls back to `DEPLOYMENT_PRIVATE_KEY`) | Private key override for AddTeeVersion |
-| `TEE_VERSION` | `v0.1.0` | Version string for TEE registration |
-| `GOVERNANCE_SIGNERS` | `INITIAL_OWNER` (deployer) | Comma-separated 0x addresses that govern this extension's TEE machines |
-| `GOVERNANCE_THRESHOLD` | `1` | Minimum distinct governance signatures required |
-| `LOCAL_MODE` | `true` | Skip attestation in local dev |
-| `WAIT_TIMEOUT` | `120` | Service wait timeout in seconds |
-| `INSTRUCTION_SENDER` | from `config/extension.env` | InstructionSender contract address (test) |
-
-### TEE governance
-
-Every TEE machine registers under a **governance** — a set of signer addresses
-and a threshold that authorize governance actions for the extension (e.g.
-machine-path-list updates). Two parties must agree on this set, or `register-tee`
-reverts with `InvalidGovernanceHash`:
-
-- the **TEE node**, which signs its machine data with a `governanceHash` derived
-  from `(signers, threshold)`, and
-- the **on-chain registry**, where the governance is registered.
-
-The scaffold keeps them consistent by reading both from one place — your `.env`:
-
-```bash
-GOVERNANCE_SIGNERS="0xAbc...,0xDef..."   # comma-separated 0x addresses
-GOVERNANCE_THRESHOLD=2
-```
-
-If unset, both default to **the deployer (`INITIAL_OWNER`) as the sole signer,
-threshold 1** — fine for development. During `post-build`, the `set-governance`
-step registers the set on-chain (idempotently) before `register-tee`, and the
-same values are passed to the node container via Docker Compose.
-
-## Prerequisites
-
-Always required:
-
-- **Foundry** (`forge`) — compiles the Solidity contract
-- **jq** — extracts ABI/bytecode from Foundry output, and drives the conformance harness
-- **Go 1.25.1+** — the deployment tooling in `tools/` is Go regardless of your extension language
-- **Docker** — builds and runs the extension image
-- **Running local infrastructure** — Hardhat node with deployed Flare contracts (via `docker compose up` from the `e2e/` repo)
-
-Additionally, for your chosen `LANGUAGE`:
-
-| Language | Also needs |
-|---|---|
-| `go` | nothing beyond the above |
-| `python` | Python 3.11+ (a venv is created automatically) |
-| `typescript` | Node 22+ and npm |
-
 ## Creating Your Extension
 
 The scaffold ships with a working Hello World. To build your extension you modify four things: the operation constants, the handlers, the Solidity contract, and the test assertions.
@@ -179,20 +118,6 @@ Every handler follows the same 4-step pattern in all three languages: decode the
 
 > ### **→ [Read the Extension Development Guide](docs/extension-guide.md)** for a detailed walkthrough, and **[docs/extension-contract.md](docs/extension-contract.md)** for the normative wire and container contract.
 
-## Quick Start
-
-With local infrastructure running (`docker compose up` from `e2e/`), run everything in one shot:
-
-```bash
-./scripts/full-setup.sh --test
-```
-
-This runs the full lifecycle:
-1. **Pre-build** — compile contracts, deploy, register extension, write `config/extension.env`
-2. **Docker Compose** — start redis, proxy, and extension TEE as containers
-3. **Post-build** — register TEE version and TEE machine on-chain
-4. **Test** — send instructions and verify results
-
 ## Making It Your Own
 
 This repository works out of the box as a Hello World extension. When you're ready to build your own extension, you'll rename the HelloWorld placeholders to your own names and replace the SAY_HELLO logic with your own operations.
@@ -201,313 +126,27 @@ This repository works out of the box as a Hello World extension. When you're rea
 >
 > Using [Claude Code](https://claude.ai/code)? Run `/rename-scaffold` to do it automatically.
 
-### Step-by-step
 
-If you prefer running each phase individually:
+## Run It
 
-#### 1. Pre-build
-
-```bash
-./scripts/pre-build.sh
-```
-
-Deploys your contract, registers the extension, and writes `config/extension.env` with `EXTENSION_ID` and `INSTRUCTION_SENDER`.
-
-To override defaults:
-```bash
-ADDRESSES_FILE=/path/to/deployed-addresses.json CHAIN_URL=http://your-node:8545 ./scripts/pre-build.sh
-```
-
-#### 2. Start services
+With local infrastructure up (`docker compose up` from `e2e/`):
 
 ```bash
-./scripts/start-services.sh
+cp .env.example .env                            # set DEPLOYMENT_PRIVATE_KEY and CHAIN_ID
+LANGUAGE=go ./scripts/full-setup.sh --test      # or python, typescript
 ```
 
-Resolves `LANGUAGE` from `.env`, builds the matching extension image (and `tee-node` base / `local/tee-proxy` when needed), then brings up Docker Compose. Prefer this over a bare `docker compose up` — raw compose defaults to `go/Dockerfile` and ignores `LANGUAGE=typescript` / `python`.
-
-> **Note:** The base compose file joins the external `docker_default` network created by the e2e infrastructure. Make sure the e2e stack is running (`docker compose up` from the `e2e/` repo) before this step, or the command will fail with a "network not found" error. If you used `full-setup.sh`, this is handled automatically.
-
-This starts three containers:
-- **redis** — queue storage for the proxy
-- **ext-proxy** — TEE proxy using `config/proxy/extension_proxy.docker.toml`
-- **extension-tee** — your extension: tee-node + extension server built from source
-
-The compose file reads `EXTENSION_ID` from `config/extension.env` (written by pre-build). It joins the infrastructure network (`docker_default`) so the proxy can reach `indexer-db` and `node`.
-
-Check status or stop:
-```bash
-docker compose ps
-docker compose logs -f extension-tee
-./scripts/stop-services.sh
-```
-
-#### 3. Post-build
-
-```bash
-./scripts/post-build.sh
-```
-
-Waits for the proxy to be ready, then registers the TEE version and TEE machine on-chain.
-
-#### 4. Test
-
-```bash
-./scripts/test.sh
-```
-
-## Running Individual Steps
-
-You can run the deploy and register steps independently:
-
-```bash
-# Deploy only
-cd tools && go run ./cmd/deploy-contract -a /path/to/deployed-addresses.json
-
-# Register with a specific contract address
-cd tools && go run ./cmd/register-extension \
-  -a /path/to/deployed-addresses.json \
-  --instructionSender 0xYourContractAddress
-```
-
-You can also run binding generation standalone:
-
-```bash
-./scripts/generate-bindings.sh
-```
-
-Post-build steps can also be run individually:
-
-```bash
-# Allow TEE version
-cd tools && go run ./cmd/allow-tee-version \
-  -a /path/to/deployed-addresses.json \
-  -p http://localhost:6664
-
-# Register TEE machine
-cd tools && go run ./cmd/register-tee \
-  -a /path/to/deployed-addresses.json \
-  -p http://localhost:6674 \
-  -ep http://localhost:6662 \
-  -command rRap
-```
-
-### Docker Compose details
-
-The `docker-compose.yaml` uses `build.context: .` — the build is self-contained: `go.mod` pins `tee-node` and it is fetched from the network (verified against `go.sum`), so no sibling `tee-node/` checkout is needed. To build the node + proxy from on-disk sibling checkouts instead (while developing `tee-node`/`tee-proxy`), run `USE_LOCAL_SIBLINGS=1 ./scripts/start-services.sh`, which selects `Dockerfile.siblings` (build context `tee/`) via `docker-compose.siblings.yaml`.
-
-To rebuild the extension image after code changes:
-```bash
-./scripts/start-services.sh            # local
-./scripts/start-services.sh --chain coston2
-```
-
-Environment variable overrides (set in shell or `.env`):
-```bash
-# Use a remote image registry instead of locally-built images
-REGISTRY=registry.gitlab.com/flarenetwork/tee/e2e docker compose up -d
-
-# Verbose logging
-LOG_LEVEL=DEBUG docker compose up -d
-```
-
-> **Building the proxy image locally:** The `tee-proxy` image is built automatically by `start-services.sh` if it doesn't exist. To build it manually, run `docker build -f proxy/Dockerfile -t local/tee-proxy proxy/` from the extension root.
-
-### Ports (local dev)
-
-| Port | Service | Purpose |
-|------|---------|---------|
-| 5501 | TEE config | Set proxy URL, initial owner, extension ID |
-| 6382 | Redis | Queue storage for proxy |
-| 6673 | Proxy internal | TEE polls actions from proxy queue |
-| 6674 | Proxy external | Clients query results, `/info` endpoint |
-| 7701 | TEE sign port | Extension calls TEE for signing/encrypting |
-| 7702 | Extension server | TEE forwards `POST /action` to extension |
-| 8100 | Types server | Decodes raw instruction data to JSON |
-
-## Testing Your Extension
-
-> After post-build completes, you **must** write and run tests to verify your extension works end-to-end. The scaffold includes a test runner and examples to get you started.
->
-> ### **→ [Read the Testing Guide](docs/testing.md)**
-
-Quick smoke test:
-
-```bash
-./scripts/test.sh
-```
-
-Or run everything (pre-build + post-build + test) in one shot:
-
-```bash
-./scripts/full-setup.sh --test
-```
-
-### The three test layers
-
-The scaffold tests at three levels, cheapest first. Only the last needs a chain.
-
-**1. Unit tests** — your implementation's own tests, dispatched by `LANGUAGE`:
-
-```bash
-./scripts/test-unit.sh              # the language from .env
-./scripts/test-unit.sh --all        # every language
-```
-
-**2. Conformance** — replays the golden wire fixtures in `testdata/conformance/` against a running extension and diffs the responses. No chain, no proxy, no Docker; runs in seconds:
-
-```bash
-./scripts/test-conformance.sh --all
-```
-
-This is what guarantees the three implementations stay byte-identical on the wire, and it is the acceptance test for any new language. If you change a handler's output shape, regenerate the fixtures with `./python/.venv/bin/python testdata/conformance/gen_fixtures.py`.
-
-**3. On-chain end-to-end** — `./scripts/test.sh`, identical for every language.
-
-Deployment tooling has its own tests:
-
-```bash
-cd tools && go test ./...                                      # unit, no chain
-cd tools && go test -tags integration ./integration/ -v -count=1  # needs a chain node
-```
-
-See the [Testing Guide](docs/testing.md) for what each layer covers and how to configure the integration tests.
-
-## Deploying to Coston2
-
-Coston2 is Flare's public testnet. Unlike local dev (which runs against a Hardhat node with pre-deployed contracts), Coston2 deployment connects to the live testnet RPC, uses real signing policies, and requires a publicly accessible proxy URL.
-
-### Prerequisites
-
-- A **funded Coston2 account** — you need a private key with testnet C2FLR for gas. Get testnet tokens from the [Coston2 faucet](https://faucet.flare.network/coston2).
-- **ngrok** (or similar tunneling tool) — the TEE proxy must be publicly reachable so data providers can deliver cosigned responses. Install from [ngrok.com](https://ngrok.com).
-- **Indexer DB credentials** — the proxy needs access to a Flare indexer database to fetch signing policies. Ask the Flare team for credentials, or use the values in the example config.
-
-### 1. Configure `.env`
-
-Copy `.env.example` and fill in your values:
-
-```bash
-cp .env.example .env
-```
-
-Key values to set:
-
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `DEPLOYMENT_PRIVATE_KEY` | Your funded Coston2 private key | Used for contract deployments and on-chain calls |
-| `INITIAL_OWNER` | Address derived from `DEPLOYMENT_PRIVATE_KEY` | Owner of deployed contracts |
-| `PROXY_PRIVATE_KEY` | Same or different funded key | Used by the proxy for signing |
-| `CHAIN_URL` | `https://coston2-api.flare.network/ext/C/rpc` | Coston2 RPC endpoint |
-| `ADDRESSES_FILE` | `./config/coston2/deployed-addresses.json` | Pre-populated with Coston2 contract addresses |
-| `LOCAL_MODE` | `false` | **Must be `false`** on live networks (enables attestation) |
-| `NORMAL_PROXY_URL` | `https://tee-proxy-coston2-1.flare.rocks` | Flare's Coston2 normal/FTDC proxy |
-| `EXT_PROXY_URL` | `https://<your-subdomain>.ngrok-free.dev` | Your ngrok tunnel URL (see step 3) |
-
-### 2. Configure the proxy
-
-The proxy config files live in `config/proxy/`. For Coston2, there are two files:
-
-- **`extension_proxy.coston2.docker.toml`** — used inside Docker (references `redis` service name)
-- **`extension_proxy.coston2.toml`** — used when running the proxy outside Docker
-
-Copy from the example files if starting fresh:
-
-```bash
-cp config/proxy/extension_proxy.coston2.docker.toml.example config/proxy/extension_proxy.coston2.docker.toml
-cp config/proxy/extension_proxy.coston2.toml.example config/proxy/extension_proxy.coston2.toml
-```
-
-Then fill in the `[db]` section with your indexer database credentials:
-
-```toml
-[db]
-host = "<indexer-db-host>"
-port = 3306
-database = "<indexer-db-name>"
-username = "<indexer-db-user>"
-password = "<indexer-db-password>"
-log_queries = false
-```
-
-The Coston2 contract addresses (`flare_systems_manager`, `relay`, `voter_registry`) are already set correctly in the example files. The `chain_id` is `114` (Coston2).
-
-### 3. Start a tunnel
-
-The extension proxy must be publicly accessible so that data providers can reach it. Two options — either exposes the proxy's external port (6674):
-
-**Cloudflare tunnel (no account needed, and the scripts drive it for you):** pass `--tunnel` to `start-services.sh` or `full-setup.sh` and it starts `docker-compose.cloudflared.yaml`, reads the generated URL, and writes it into `.env` as `EXT_PROXY_URL` — so you can skip the copy-paste below. See [docs/cloudflared.md](docs/cloudflared.md).
-
-**ngrok:**
-
-```bash
-ngrok http 6674
-```
-
-Copy the generated HTTPS URL (e.g., `https://abc123.ngrok-free.dev`) and set it as `EXT_PROXY_URL` in your `.env`.
-
-### 4. Pre-build (deploy & register)
-
-```bash
-./scripts/pre-build.sh
-```
-
-This deploys your `InstructionSender` contract to Coston2 and registers your extension on the `TeeExtensionRegistry`. The scripts auto-detect Coston2 addresses when `LOCAL_MODE=false`.
-
-### 5. Start services
-
-Use `start-services.sh` — do **not** call `docker compose` directly. The script resolves `LANGUAGE` from `.env` (so TypeScript/Python actually build), builds the `tee-node` base image and `local/tee-proxy` when needed, attaches the Coston2 compose overlay, and waits for the proxy to be ready:
-
-```bash
-./scripts/start-services.sh --chain coston2
-```
-
-Compared to a bare `docker compose up`, this:
-- Sets `EXTENSION_DOCKERFILE` from `LANGUAGE` (raw compose defaults to `go/Dockerfile`)
-- Mounts `config/proxy/extension_proxy.coston2.docker.toml` instead of the local proxy config
-- Sets `CHAIN_URL` / `CHAIN_ID` for Coston2
-- Creates its own network (`extension-scaffold-coston2`) instead of joining the local e2e `docker_default` network
-
-Check status:
-```bash
-docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml ps
-docker compose -f docker-compose.yaml -f docker-compose.coston2.yaml logs -f extension-tee
-```
-
-### 6. Post-build (register TEE)
-
-```bash
-./scripts/post-build.sh
-```
-
-This allows the TEE version, registers the extension's TEE **governance** (see [TEE governance](#tee-governance)), and registers the TEE machine on-chain. It reads `EXT_PROXY_URL` and `NORMAL_PROXY_URL` from your `.env`, so make sure ngrok is running and the URL is correct.
-
-### 7. Test
-
-```bash
-./scripts/test.sh
-```
-
-Sends instructions on-chain via your deployed `InstructionSender` and polls the proxy for results.
-
-### Stopping Coston2 services
-
-```bash
-./scripts/stop-services.sh --chain coston2
-```
-
-### Coston2 vs Local Dev — Key Differences
-
-| | Local Dev | Coston2 |
-|---|-----------|---------|
-| Chain | Hardhat (`localhost:8545`) | `coston2-api.flare.network` |
-| `LOCAL_MODE` | `true` (skip attestation) | `false` (real attestation) |
-| Proxy config | `extension_proxy.docker.toml` | `extension_proxy.coston2.docker.toml` |
-| Indexer DB | Local `indexer-db` container | Remote Flare indexer |
-| Network | Joins `docker_default` (e2e infra) | Own `extension-scaffold-coston2` network |
-| Proxy accessibility | `localhost:6674` | Public URL via ngrok |
-| Normal proxy | `localhost:6662` | `https://tee-proxy-coston2-1.flare.rocks` |
-| Start services | `./scripts/start-services.sh` | `./scripts/start-services.sh --chain coston2` |
+Prerequisites, configuration, ports and the failure table are in
+[docs/getting-started.md](docs/getting-started.md). Coston2 deployment and the platform
+traps that cost redeploys are in [docs/deployment-steps.md](docs/deployment-steps.md).
+
+## Testing
+
+Three layers, cheapest first — unit (`test-unit.sh`), wire conformance against golden
+fixtures with no chain required (`test-conformance.sh`), and on-chain end-to-end
+(`test.sh`). Conformance is what guarantees the three implementations stay
+byte-identical on the wire, and it is the acceptance test for any new language. See
+[docs/testing.md](docs/testing.md).
 
 ## Further Reading
 
@@ -527,3 +166,9 @@ Sends instructions on-chain via your deployed `InstructionSender` and polls the 
 **Per-language**
 
 - [go/README.md](go/README.md) · [python/README.md](python/README.md) · [typescript/README.md](typescript/README.md)
+
+---
+
+## Built On
+
+Flare Confidential Compute — see the [FCC overview](https://dev.flare.network/fcc/overview) for the underlying primitives (extensions, signing policies, data providers, attestation, Protocol Managed Wallets).

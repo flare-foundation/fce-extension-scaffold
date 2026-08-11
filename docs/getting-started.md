@@ -58,13 +58,45 @@ A passing run prints `Hello, World! Welcome to Flare Confidential Compute.` and
 Everything lives in `.env` (start from `.env.example`); per-chain copies go in
 `.env.<chain>` and `use-chain.sh` activates them.
 
-| Var | Note |
-|---|---|
-| `DEPLOYMENT_PRIVATE_KEY` | funded deployer; the Hardhat dev key works on local devnet |
-| `CHAIN_URL` / `CHAIN_ID` | `CHAIN_ID` is **required** — unset leaves `chainID=0` and every TEE signature comes back empty |
-| `LANGUAGE` | which implementation directory gets built |
-| `EXT_PROXY_URL` | this extension's proxy; must be publicly reachable on testnets |
-| `SIMULATED_TEE` | `true` on a laptop, **`false`** on real Confidential hardware |
+| Var | Default | Note |
+|---|---|---|
+| `LANGUAGE` | `go` | which implementation directory gets built |
+| `DEPLOYMENT_PRIVATE_KEY` | Hardhat dev key | funded deployer |
+| `CHAIN_URL` / `CHAIN_ID` | `http://127.0.0.1:8545` | `CHAIN_ID` is **required** — unset leaves `chainID=0` and every TEE signature comes back empty |
+| `SIMULATED_TEE` | `true` | `true` on a laptop, **`false`** on real Confidential hardware |
+| `EXT_PROXY_URL` | `http://localhost:6674` | this extension's proxy; must be publicly reachable on testnets |
+| `NORMAL_PROXY_URL` | `http://localhost:6662` | the infrastructure FTDC proxy (post-build) |
+| `ADDRESSES_FILE` | auto-detected | path to `deployed-addresses.json` |
+| `EXTENSION_ID` | from `config/extension.env` | bytes32 hex, written by pre-build |
+| `INSTRUCTION_SENDER` | from `config/extension.env` | contract address, written by pre-build |
+| `INITIAL_OWNER` | derived from the deployer key | initial contract owner |
+| `PROXY_PRIVATE_KEY` | Hardhat dev key | proxy signing key |
+| `EXTENSION_OWNER_KEY` | falls back to `DEPLOYMENT_PRIVATE_KEY` | key override for `allow-tee-version` |
+| `TEE_VERSION` | `v0.1.0` | version string for TEE registration |
+| `GOVERNANCE_SIGNERS` | `INITIAL_OWNER` | comma-separated 0x addresses — see below |
+| `GOVERNANCE_THRESHOLD` | `1` | minimum distinct governance signatures |
+| `WAIT_TIMEOUT` | `120` | service wait timeout, seconds |
+| `REGISTRY` | (unset) | pull images from a remote registry instead of building |
+| `LOG_LEVEL` | `INFO` | `DEBUG` for verbose container logs |
+
+### TEE governance
+
+Every TEE machine registers under a **governance** — a signer set plus a threshold
+that authorises governance actions for the extension. Two parties must agree on it or
+`register-tee` reverts with `InvalidGovernanceHash`: the **TEE node**, which signs its
+machine data with a `governanceHash` derived from `(signers, threshold)`, and the
+**on-chain registry** where the governance is registered.
+
+The scaffold keeps them consistent by reading both from `.env`:
+
+```bash
+GOVERNANCE_SIGNERS="0xAbc...,0xDef..."   # comma-separated 0x addresses
+GOVERNANCE_THRESHOLD=2
+```
+
+Unset, both default to the deployer as sole signer, threshold 1 — fine for
+development. `post-build.sh` registers the set on-chain idempotently before
+`register-tee`, and passes the same values to the node container via Compose.
 
 ## Ports
 
