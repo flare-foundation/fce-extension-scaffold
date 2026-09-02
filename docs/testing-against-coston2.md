@@ -29,10 +29,15 @@ curl -s "$EXT_PROXY_URL/info" | jq '{extensionId, codeHash, platform}'
 Then check the on-chain side:
 
 ```bash
-cd tools
-go run ./cmd/query-tee -ext <extensionId> -rpc "$CHAIN_URL"
-go run ./cmd/verify-deploy -a ../config/coston2/deployed-addresses.json -c "$CHAIN_URL"
+cd tools && source ../config/extension.env
+A=../config/coston2/deployed-addresses.json
+REG=$(jq -r '.[]|select(.name=="FlareTeeManager").address' $A)
+go run ./cmd/query-tee -ext "$((EXTENSION_ID))" -reg "$REG" -rpc "$CHAIN_URL"
+go run ./cmd/verify-deploy -a $A -c "$CHAIN_URL"
 ```
+
+`-ext` takes the **decimal** extension id and `-reg` defaults to a stale address —
+pass both as above or the query silently returns nothing.
 
 `query-tee` lists the TEE machines registered for the extension. **More than one
 active machine is a problem** — instructions are load-balanced across them, so a

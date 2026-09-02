@@ -226,9 +226,14 @@ to a dead node roughly half the time and silently never complete (`/action/resul
 404s, callers report a poll timeout).
 
 ```bash
-cd tools && go run ./cmd/query-tee -ext <extensionId> -rpc "$CHAIN_URL"   # via getActiveTeeMachines
-cast send <FlareTeeManager> 'pause(address)' <staleTeeId> --rpc-url "$CHAIN_URL" --private-key "$KEY"
+cd tools && source ../config/extension.env
+DIAMOND=$(jq -r '.[]|select(.name=="FlareTeeManager").address' ../config/$CHAIN/deployed-addresses.json)
+go run ./cmd/query-tee -ext "$((EXTENSION_ID))" -reg "$DIAMOND" -rpc "$CHAIN_URL"   # getActiveTeeMachines
+cast send "$DIAMOND" 'pause(address)' <staleTeeId> --rpc-url "$CHAIN_URL" --private-key "$KEY"
 ```
+
+`-ext` is **decimal**, not the bytes32 hex — `$((EXTENSION_ID))` converts it. `-reg`
+defaults to a stale address; always pass the diamond.
 
 The live `teeId` is `keccak256(pubkey.x ‖ pubkey.y)[12:]` from the proxy's `/info`.
 There is no `unpause` — only `toProduction` with a fresh availability proof — so
