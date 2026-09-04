@@ -23,6 +23,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/chain-env.sh"   # chain table + resolve_chain
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[stop-services]${NC} $*"; }
@@ -31,14 +32,14 @@ die()  { echo -e "${RED}[stop-services] ERROR:${NC} $*" >&2; exit 1; }
 # --- Parse flags ---
 USE_LOCAL=false
 USE_TUNNEL=false
-CHAIN="${CHAIN:-}"
+CHAIN_FLAG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --local) USE_LOCAL=true; shift ;;
         --tunnel) USE_TUNNEL=true; shift ;;
-        --chain) [[ $# -ge 2 ]] || die "--chain requires a value (local|coston|coston2)"
-                 CHAIN="$2"; shift 2 ;;
-        --chain=*) CHAIN="${1#--chain=}"; shift ;;
+        --chain) [[ $# -ge 2 ]] || die "--chain requires a value (${CHAINS// /|})"
+                 CHAIN_FLAG="$2"; shift 2 ;;
+        --chain=*) CHAIN_FLAG="${1#--chain=}"; shift ;;
         *) die "Unknown argument: $1" ;;
     esac
 done
@@ -53,6 +54,8 @@ fi
 LOCAL_MODE="${LOCAL_MODE:-true}"
 
 # --- Resolve CHAIN (flag > env > legacy LOCAL_MODE) ---
+# Flag beats .env: sourcing .env above would otherwise clobber --chain.
+CHAIN="${CHAIN_FLAG:-${CHAIN:-}}"
 if [[ -z "$CHAIN" ]]; then
     if [[ "$LOCAL_MODE" == "true" ]]; then
         CHAIN="local"
@@ -60,10 +63,7 @@ if [[ -z "$CHAIN" ]]; then
         CHAIN="coston2"  # legacy
     fi
 fi
-case "$CHAIN" in
-    local|coston|coston2) ;;
-    *) die "Unknown --chain value: $CHAIN (valid: local, coston, coston2)" ;;
-esac
+valid_chain "$CHAIN" || die "Unknown --chain value: $CHAIN (valid: ${CHAINS// /, })"
 
 if [[ "$USE_LOCAL" == "true" ]]; then
     # --- Stop background Go processes ---
@@ -82,11 +82,9 @@ else
         1|true|yes|on) COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.siblings.yaml") ;;
     esac
 
-    case "$CHAIN" in
-        local) ;;
-        coston)  COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.coston.yaml") ;;
-        coston2) COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.coston2.yaml") ;;
-    esac
+    if [[ "$CHAIN" != "local" && -f "$PROJECT_DIR/docker-compose.$CHAIN.yaml" ]]; then
+        COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.$CHAIN.yaml")
+    fi
 
     # docker-compose.yaml interpolates SOURCE_DATE_EPOCH as a build arg. It's
     # irrelevant on `down`, but compose still warns when it's unset — silence it.

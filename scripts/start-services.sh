@@ -36,6 +36,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/chain-env.sh"   # chain table + resolve_chain
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[start-services]${NC} $*"; }
@@ -44,14 +45,14 @@ die()  { echo -e "${RED}[start-services] ERROR:${NC} $*" >&2; exit 1; }
 # --- Parse flags ---
 USE_LOCAL=false
 USE_TUNNEL=false
-CHAIN="${CHAIN:-}"
+CHAIN_FLAG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --local) USE_LOCAL=true; shift ;;
         --tunnel) USE_TUNNEL=true; shift ;;
-        --chain) [[ $# -ge 2 ]] || die "--chain requires a value (local|coston|coston2)"
-                 CHAIN="$2"; shift 2 ;;
-        --chain=*) CHAIN="${1#--chain=}"; shift ;;
+        --chain) [[ $# -ge 2 ]] || die "--chain requires a value (${CHAINS// /|})"
+                 CHAIN_FLAG="$2"; shift 2 ;;
+        --chain=*) CHAIN_FLAG="${1#--chain=}"; shift ;;
         *) die "Unknown argument: $1" ;;
     esac
 done
@@ -64,7 +65,7 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
 fi
 
 # --- Load extension config ---
-CONFIG_FILE="$PROJECT_DIR/config/extension.env"
+CONFIG_FILE="$(extension_env_path)"
 if [[ -f "$CONFIG_FILE" ]]; then
     # shellcheck disable=SC1090
     source "$CONFIG_FILE"
@@ -75,6 +76,8 @@ PROXY_PRIVATE_KEY="${PROXY_PRIVATE_KEY:-983760a4ebf75b2ac3a93531168a0f225d01e5dc
 LOCAL_MODE="${LOCAL_MODE:-true}"
 
 # --- Resolve CHAIN (flag > env > legacy LOCAL_MODE) ---
+# Flag beats .env: sourcing .env above would otherwise clobber --chain.
+CHAIN="${CHAIN_FLAG:-${CHAIN:-}}"
 if [[ -z "$CHAIN" ]]; then
     if [[ "$LOCAL_MODE" == "true" ]]; then
         CHAIN="local"
@@ -82,10 +85,8 @@ if [[ -z "$CHAIN" ]]; then
         CHAIN="coston2"  # legacy
     fi
 fi
-case "$CHAIN" in
-    local|coston|coston2) ;;
-    *) die "Unknown --chain value: $CHAIN (valid: local, coston, coston2)" ;;
-esac
+valid_chain "$CHAIN" || die "Unknown --chain value: $CHAIN (valid: ${CHAINS// /, })"
+resolve_chain "$CHAIN"
 
 [[ -n "$EXTENSION_ID" ]] || die "EXTENSION_ID not set. Run pre-build.sh first or set it manually."
 
@@ -294,17 +295,12 @@ if [[ "$USE_LOCAL" == "false" ]]; then
         COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.siblings.yaml")
     fi
 
-    case "$CHAIN" in
-        local) ;;
-        coston)
-            log "Coston mode — attaching docker-compose.coston.yaml"
-            COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.coston.yaml")
-            ;;
-        coston2)
-            log "Coston2 mode — attaching docker-compose.coston2.yaml"
-            COMPOSE_FILES+=("-f" "$PROJECT_DIR/docker-compose.coston2.yaml")
-            ;;
-    esac
+    if [[ "$CHAIN" != "local" ]]; then
+        override="$PROJECT_DIR/docker-compose.$CHAIN.yaml"
+        [[ -f "$override" ]] || die "$override not found — run ./scripts/use-chain.sh $CHAIN to generate it"
+        log "$CHAIN mode — attaching docker-compose.$CHAIN.yaml"
+        COMPOSE_FILES+=("-f" "$override")
+    fi
 
     # Compose bind-mounts this as the proxy's config.toml; if missing, docker
     # makes a directory there and `up` dies with an opaque rootfs error.
@@ -343,11 +339,11 @@ if [[ "$USE_LOCAL" == "false" ]]; then
     echo -e "${GREEN}========================================${NC}"
     echo ""
     echo -e "${CYAN}Mode${NC}"
-    case "$CHAIN" in
-        local)   echo "  Local devnet" ;;
-        coston)  echo "  Coston testnet (chain_id=16)" ;;
-        coston2) echo "  Coston2 testnet (chain_id=114)" ;;
-    esac
+    if [[ "$CHAIN" == "local" ]]; then
+        echo "  Local devnet"
+    else
+        echo "  $CHAIN testnet (chain_id=$(chain_id_for "$CHAIN"))"
+    fi
     echo ""
     echo -e "${CYAN}Services${NC}"
     echo "  redis, ext-proxy, extension-tee"

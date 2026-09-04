@@ -22,6 +22,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/chain-env.sh"   # chain table + resolve_chain
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[full-setup]${NC} $*"; }
@@ -32,17 +33,22 @@ RUN_TESTS=false
 USE_LOCAL=false
 USE_TUNNEL=false
 CHAIN=""
+CHAIN_FLAG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --test) RUN_TESTS=true; shift ;;
         --local) USE_LOCAL=true; shift ;;
         --tunnel) USE_TUNNEL=true; shift ;;
-        --chain) [[ $# -ge 2 ]] || die "--chain requires a value (local|coston|coston2)"
-                 CHAIN="$2"; shift 2 ;;
-        --chain=*) CHAIN="${1#--chain=}"; shift ;;
+        --chain) [[ $# -ge 2 ]] || die "--chain requires a value (${CHAINS// /|})"
+                 CHAIN_FLAG="$2"; shift 2 ;;
+        --chain=*) CHAIN_FLAG="${1#--chain=}"; shift ;;
         *) die "Unknown argument: $1" ;;
     esac
 done
+
+# Validate before anything with a side effect — the .env copy below is one.
+CHAIN="$CHAIN_FLAG"
+[[ -z "$CHAIN" ]] || valid_chain "$CHAIN"     || die "Unknown --chain value: $CHAIN (valid: ${CHAINS// /, })"
 
 # --- Auto-activate chain-specific env when --chain was passed explicitly ---
 # If --chain <name> was given and a .env.<name> exists, activate it (copy → .env)
@@ -53,7 +59,7 @@ if [[ -n "$CHAIN" && -f "$PROJECT_DIR/.env.$CHAIN" ]]; then
     log "Activated .env.$CHAIN → .env"
 elif [[ -n "$CHAIN" && "$CHAIN" != "local" && ! -f "$PROJECT_DIR/.env.$CHAIN" ]]; then
     warn "No .env.$CHAIN found — using the existing .env as-is, which may target a different chain."
-    warn "Create .env.$CHAIN (e.g. from .env.example) so '--chain $CHAIN' switches automatically."
+    warn "Run ./scripts/use-chain.sh $CHAIN to generate it (env, proxy toml, compose override)."
 fi
 
 # --- Resolve chain (flag > env > legacy LOCAL_MODE) ---
@@ -65,10 +71,10 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     set +a
 fi
 
+# Flag beats .env: sourcing .env above would otherwise clobber --chain.
+CHAIN="${CHAIN_FLAG:-${CHAIN:-}}"
 if [[ -z "$CHAIN" ]]; then
-    if [[ -n "${CHAIN:-}" ]]; then
-        :  # honor env CHAIN
-    elif [[ "${LOCAL_MODE:-true}" == "true" ]]; then
+    if [[ "${LOCAL_MODE:-true}" == "true" ]]; then
         CHAIN="local"
     else
         # Legacy default: LOCAL_MODE=false meant Coston2
@@ -77,24 +83,17 @@ if [[ -z "$CHAIN" ]]; then
 fi
 
 # --- Apply chain defaults (don't clobber explicit env settings) ---
-case "$CHAIN" in
-    local)
-        export LOCAL_MODE="true"
-        ;;
-    coston)
-        export LOCAL_MODE="false"
-        export ADDRESSES_FILE="${ADDRESSES_FILE:-$PROJECT_DIR/config/coston/deployed-addresses.json}"
-        export CHAIN_URL="${CHAIN_URL:-https://coston-api.flare.network/ext/C/rpc}"
-        export NORMAL_PROXY_URL="${NORMAL_PROXY_URL:-https://tee-proxy-coston-1.flare.rocks}"
-        ;;
-    coston2)
-        export LOCAL_MODE="false"
-        export ADDRESSES_FILE="${ADDRESSES_FILE:-$PROJECT_DIR/config/coston2/deployed-addresses.json}"
-        export CHAIN_URL="${CHAIN_URL:-https://coston2-api.flare.network/ext/C/rpc}"
-        export NORMAL_PROXY_URL="${NORMAL_PROXY_URL:-https://tee-proxy-coston2-1.flare.rocks}"
-        ;;
-    *) die "Unknown --chain value: $CHAIN (valid: local, coston, coston2)" ;;
-esac
+valid_chain "$CHAIN" || die "Unknown --chain value: $CHAIN (valid: ${CHAINS// /, })"
+if [[ "$CHAIN" == "local" ]]; then
+    export LOCAL_MODE="true"
+else
+    export LOCAL_MODE="false"
+    export ADDRESSES_FILE="${ADDRESSES_FILE:-$PROJECT_DIR/config/$CHAIN/deployed-addresses.json}"
+    export CHAIN_URL="${CHAIN_URL:-$(chain_rpc_for "$CHAIN")}"
+    export NORMAL_PROXY_URL="${NORMAL_PROXY_URL:-https://tee-proxy-$CHAIN-1.flare.rocks}"
+    export CHAIN_ID="${CHAIN_ID:-$(chain_id_for "$CHAIN")}"
+fi
+resolve_chain "$CHAIN"
 export CHAIN
 
 log "Chain: $CHAIN"
