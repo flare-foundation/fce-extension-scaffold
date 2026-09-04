@@ -55,28 +55,29 @@ The derived address becomes your `INITIAL_OWNER`. Fund it from the target chain'
 
 ## 3. Create `.env.<chain>`
 
-Copy `.env.example` to `.env.coston` or `.env.coston2`. Fill in:
+`use-chain.sh` creates everything the chain needs — `.env.<chain>`, the proxy
+toml and the compose override — cloning the active `.env` and rewriting only the
+chain-specific values. It never overwrites an existing file.
 
 ```bash
-CHAIN=coston2                                                         # or coston
-CHAIN_URL=https://coston2-api.flare.network/ext/C/rpc                 # chain RPC
-ADDRESSES_FILE=./config/coston2/deployed-addresses.json
-NORMAL_PROXY_URL=https://tee-proxy-coston2-1.flare.rocks              # FTDC proxy
-EXT_PROXY_URL=                                                        # leave empty — set in Step 6
+bash ./scripts/use-chain.sh <chain>     # local | coston | coston2 | songbird | flare
+```
 
-LOCAL_MODE=false
-SIMULATED_TEE=false
+It cannot invent `config/<chain>/deployed-addresses.json` — copy that in first.
+
+It writes `CHAIN`, `CHAIN_ID`, `CHAIN_URL`, `ADDRESSES_FILE`, `NORMAL_PROXY_URL`,
+`LOCAL_MODE=false` and `SIMULATED_TEE=false` itself. Two values are yours, in
+`.env.<chain>`:
+
+```bash
 DEPLOYMENT_PRIVATE_KEY=<private key, no 0x prefix>
 INITIAL_OWNER=0x<derived address from Step 2>
 ```
 
-Activate it:
+`EXT_PROXY_URL` is left empty deliberately — you get it in Step 6.
 
-```bash
-bash ./scripts/use-chain.sh <chain>
-```
-
-Copies `.env.<chain>` → `.env`, which all scripts auto-load.
+Re-run `use-chain.sh <chain>` after editing to copy `.env.<chain>` → `.env`,
+which every script auto-loads. Edit `.env.<chain>`, never `.env`.
 
 ## 4. Register the extension on-chain
 
@@ -84,12 +85,12 @@ Copies `.env.<chain>` → `.env`, which all scripts auto-load.
 bash ./scripts/pre-build.sh
 ```
 
-Compiles Solidity, deploys `InstructionSender`, registers the extension on-chain. Writes `EXTENSION_ID` and `INSTRUCTION_SENDER` to `config/extension.env`.
+Compiles Solidity, deploys `InstructionSender`, registers the extension on-chain. Writes `EXTENSION_ID` and `INSTRUCTION_SENDER` to `config/<chain>/extension.env`.
 
 Read the new values — `EXTENSION_ID` is part of the hand-off in Step 6:
 
 ```bash
-cat config/extension.env
+source .env && cat "config/$CHAIN/extension.env"
 ```
 
 ## 5. Build the Docker image
@@ -181,7 +182,7 @@ Required values:
 | -------------- | ----------------------------------------------------------------- |
 | `platform`     | starts with `0x4743505f414d445f534556…` (GCP_AMD_SEV)             |
 | `codeHash`     | real measured hash (**not** `0x194844cf…` — that's simulated)     |
-| `extensionId`  | matches your `config/extension.env` `EXTENSION_ID`                |
+| `extensionId`  | matches your `config/<chain>/extension.env` `EXTENSION_ID`           |
 | `initialOwner` | matches your `INITIAL_OWNER`                                      |
 
 If `extensionId` is wrong, ask the VM operator to restart the container with the correct `EXTENSION_ID` env override (no image rebuild needed — it's a launch-policy override).
@@ -226,7 +227,7 @@ to a dead node roughly half the time and silently never complete (`/action/resul
 404s, callers report a poll timeout).
 
 ```bash
-cd tools && source ../config/extension.env
+cd tools && source ../.env && source "../config/$CHAIN/extension.env"
 DIAMOND=$(jq -r '.[]|select(.name=="FlareTeeManager").address' ../config/$CHAIN/deployed-addresses.json)
 go run ./cmd/query-tee -ext "$((EXTENSION_ID))" -reg "$DIAMOND" -rpc "$CHAIN_URL"   # getActiveTeeMachines
 cast send "$DIAMOND" 'pause(address)' <staleTeeId> --rpc-url "$CHAIN_URL" --private-key "$KEY"

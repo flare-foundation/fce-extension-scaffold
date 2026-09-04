@@ -8,10 +8,10 @@ first, see [deployment-steps.md](deployment-steps.md).
 
 | Need | Note |
 |---|---|
-| `.env.coston2` | filled in; `use-chain.sh coston2` activates it |
+| `.env.coston2` | `use-chain.sh coston2` creates and activates it |
 | A funded Coston2 key | sends the test instructions; get C2FLR from the [faucet](https://faucet.flare.network/coston2) |
 | `config/coston2/deployed-addresses.json` | the `FlareTeeManager` diamond and friends |
-| `config/proxy/extension_proxy.coston2.docker.toml` | gitignored — copy the `.example` and fill in `[db]` |
+| `config/proxy/extension_proxy.coston2.docker.toml` | gitignored; `use-chain.sh coston2` generates it — verify the `[db]` credentials it carried over |
 | A reachable `EXT_PROXY_URL` | the VM's URL, or a tunnel if the proxy runs locally |
 
 ## Confirm the deployment is live
@@ -22,14 +22,14 @@ curl -s "$EXT_PROXY_URL/info" | jq '{extensionId, codeHash, platform}'
 
 | Field | Expect |
 |---|---|
-| `extensionId` | matches `EXTENSION_ID` in `config/extension.env` |
+| `extensionId` | matches `EXTENSION_ID` in `config/coston2/extension.env` |
 | `codeHash` | the hash registered on-chain — `0x194844cf…` means simulated, not real hardware |
 | `platform` | `GCP_AMD_SEV` on real hardware, `TEST_PLATFORM` when simulated |
 
 Then check the on-chain side:
 
 ```bash
-cd tools && source ../config/extension.env
+cd tools && source "../config/coston2/extension.env"
 A=../config/coston2/deployed-addresses.json
 REG=$(jq -r '.[]|select(.name=="FlareTeeManager").address' $A)
 go run ./cmd/query-tee -ext "$((EXTENSION_ID))" -reg "$REG" -rpc "$CHAIN_URL"
