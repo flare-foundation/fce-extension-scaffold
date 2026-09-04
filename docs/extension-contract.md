@@ -96,7 +96,7 @@ Encoding rules for the Go types involved:
 | `uint8` / `uint32` / `uint64` | JSON number |
 | `string` | JSON string |
 
-**bytes32 identifiers** (`opType`, `opCommand`) are UTF-8 strings right-padded with zero bytes to 32 bytes, then hex-encoded. `"GREETING"` becomes `0x4752454554494e4700000000000000000000000000000000000000000000000000`-style padding — 8 content bytes followed by 24 zero bytes. The empty string is 32 zero bytes, and it is meaningful: see §5.
+**bytes32 identifiers** (`opType`, `opCommand`) are UTF-8 strings right-padded with zero bytes to 32 bytes, then hex-encoded. `"GREETING"` becomes `0x4752454554494e47000000000000000000000000000000000000000000000000`-style padding — 8 content bytes followed by 24 zero bytes. The empty string is 32 zero bytes, and it is meaningful: see §5.
 
 ### 4.1 `Action` — request body of `POST /action`
 

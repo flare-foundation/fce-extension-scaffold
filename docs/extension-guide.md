@@ -110,15 +110,16 @@ type SayHelloResponse struct {
     GreetingNumber int    `json:"greetingNumber"`
 }
 
-// What the user sends for a SAY_GOODBYE command
+// What the user sends for a SAY_GOODBYE command (ABI-encoded, not JSON)
 type SayGoodbyeRequest struct {
-    Name string `json:"name"`
+    Name   string `json:"name"`
+    Reason string `json:"reason"`
 }
 
 // What your extension returns for SAY_GOODBYE
 type SayGoodbyeResponse struct {
-    Farewell      string `json:"farewell"`
-    FarewellCount int    `json:"farewellCount"`
+    Farewell       string `json:"farewell"`
+    FarewellNumber int    `json:"farewellNumber"`
 }
 
 // Your extension's cumulative state
@@ -246,14 +247,14 @@ func (e *Extension) processSayGoodbye(action teetypes.Action, df *instruction.Da
     e.mu.Lock()
     e.farewellCount++
     farewellNumber := e.farewellCount
-    farewell := fmt.Sprintf("Goodbye, %s! See you next time.", req.Name)
+    farewell := fmt.Sprintf("Goodbye, %s! Reason: %s", req.Name, req.Reason)
     e.lastFarewell = farewell
     e.mu.Unlock()
 
     // 4. Build response
     resp := types.SayGoodbyeResponse{
-        Farewell:      farewell,
-        FarewellCount: farewellNumber,
+        Farewell:       farewell,
+        FarewellNumber: farewellNumber,
     }
     data, _ := json.Marshal(resp)
 

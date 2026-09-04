@@ -70,7 +70,7 @@ import "your-module/tools/pkg/contracts/helloworld"
 // ... helloworld.DeployHelloWorldInstructionSender(...)
 // ... helloworld.NewHelloWorldInstructionSender(...)
 // ... sender.SendSayHello(opts, message)
-// ... sender.SendSayGoodbye(opts, message)
+// ... sender.SendSayGoodbye(opts, name, reason)
 
 // After:
 import "your-module/tools/pkg/contracts/orderbook"
