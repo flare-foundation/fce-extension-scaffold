@@ -14,6 +14,10 @@ config/proxy/extension_proxy.coston.toml
 config/proxy/extension_proxy.coston.docker.toml
 config/proxy/extension_proxy.coston2.toml
 config/proxy/extension_proxy.coston2.docker.toml
+config/proxy/extension_proxy.songbird.toml
+config/proxy/extension_proxy.songbird.docker.toml
+config/proxy/extension_proxy.flare.toml
+config/proxy/extension_proxy.flare.docker.toml
 config/extension.env
 out/
 cache/
@@ -60,4 +64,5 @@ notes/
 DEPLOYMENT.md
 
 config/**/*.log
-config/register-tee.state
+# Per-chain one-shot registration state written by register-tee — machine-local.
+config/**/*.state
