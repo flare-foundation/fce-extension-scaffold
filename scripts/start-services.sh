@@ -125,6 +125,16 @@ log "Chain:          $CHAIN"
 log "Language:       $LANGUAGE ($EXTENSION_DOCKERFILE)"
 log "Extension ID:   $EXTENSION_ID"
 log "Local mode:     $LOCAL_MODE"
+
+SIMULATED_TEE="${SIMULATED_TEE:-true}"
+if [[ "$SIMULATED_TEE" == "true" ]]; then
+    SOURCE_ENV_FILE="$PROJECT_DIR/.env.local.$CHAIN"
+else
+    SOURCE_ENV_FILE="$PROJECT_DIR/.env.$CHAIN"
+fi
+# MODE follows SIMULATED_TEE so the tooling and the container cannot disagree.
+[[ "$SIMULATED_TEE" == "true" ]] && MODE="${MODE:-1}" || MODE="${MODE:-0}"
+export MODE
 log "Local siblings: $USE_LOCAL_SIBLINGS"
 log "tee-node ref:   $TEE_NODE_REF"
 
@@ -159,9 +169,11 @@ elif [[ -f "$GOWORK_FILE" ]]; then
     rm -f "$GOWORK_FILE" "$PROJECT_DIR/go.work.sum"
 fi
 
+# ============================================================
+# Docker Compose mode (default)
+# ============================================================
 # Synced before the other containers so EXT_PROXY_URL is public by the time
-# post-build.sh registers it. --tunnel only STARTS a missing tunnel; a running
-# one is always resynced into .env, which is what makes switching extensions work.
+# post-build.sh registers it. Simulated mode owns the tunnel; live mode never touches it.
 TUNNEL_ACTIVE=false
 sync_tunnel() {
     local cf_compose="$PROJECT_DIR/docker-compose.cloudflared.yaml"
@@ -174,20 +186,14 @@ sync_tunnel() {
         proj=(-p tunnel-local)
         export TUNNEL_TARGET="http://host.docker.internal:6664"
     elif [[ -n "${TUNNEL_TARGET:-}" ]]; then
-        log "NOTE: TUNNEL_TARGET is set — this recreates the shared 'tunnel'"
-        log "      container and mints a new URL. Use -p <name> to isolate it."
+        log "NOTE: TUNNEL_TARGET is set — this recreates the shared 'tunnel' container."
     fi
 
     if docker compose "${proj[@]}" -f "$cf_compose" ps -q cloudflared 2>/dev/null | grep -q .; then
         log "Cloudflare tunnel already running — reusing it."
-    elif [[ "$USE_TUNNEL" == "true" ]]; then
-        docker compose "${proj[@]}" -f "$cf_compose" up -d || die "Failed to start cloudflared"
     else
-        # Otherwise the only symptom is the /info wait timing out, which does not
-        # point at the tunnel at all.
-        log "NOTE: no tunnel running and --tunnel not passed — EXT_PROXY_URL must"
-        log "      already be reachable by Flare, or the proxy wait below times out."
-        return
+        log "Starting the Cloudflare tunnel (first, before the stack)..."
+        docker compose "${proj[@]}" -f "$cf_compose" up -d || die "Failed to start cloudflared"
     fi
     TUNNEL_ACTIVE=true
 
@@ -197,8 +203,7 @@ sync_tunnel() {
         return
     fi
 
-    # A restarted container keeps its old logs, so scan only from this start —
-    # otherwise tail -1 hands back the previous run's dead hostname.
+    # A restarted container keeps its old logs, so scan only from this start.
     local cid started
     local -a since=()
     cid=$(docker compose "${proj[@]}" -f "$cf_compose" ps -q cloudflared 2>/dev/null | head -1 || true)
@@ -208,8 +213,7 @@ sync_tunnel() {
     log "Reading the quick-tunnel URL..."
     local url="" i
     for ((i = 0; i < 30; i++)); do
-        # `|| true` is load-bearing: grep exits 1 until the URL appears, and
-        # pipefail would kill the loop on iteration 1 instead of retrying.
+        # `|| true` is load-bearing: grep exits 1 until the URL appears.
         url=$(docker compose "${proj[@]}" -f "$cf_compose" logs "${since[@]}" cloudflared 2>/dev/null \
               | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true)
         [[ -n "$url" ]] && break
@@ -218,31 +222,38 @@ sync_tunnel() {
     [[ -n "$url" ]] || die "cloudflared printed no *.trycloudflare.com URL within 30s.\n  Check: docker compose ${proj[*]} -f $cf_compose logs cloudflared"
 
     export EXT_PROXY_URL="$url"
-    # post-build.sh and test.sh re-source .env, so the file is how the fresh URL
-    # reaches them — exporting alone would be overwritten.
-    if [[ -f "$PROJECT_DIR/.env" ]]; then
-        if grep -q '^EXT_PROXY_URL=' "$PROJECT_DIR/.env"; then
-            sed -i.bak "s|^EXT_PROXY_URL=.*|EXT_PROXY_URL=$url|" "$PROJECT_DIR/.env"
-            rm -f "$PROJECT_DIR/.env.bak"
-        else
-            echo "EXT_PROXY_URL=$url" >> "$PROJECT_DIR/.env"
-        fi
-        log "Tunnel URL: $url  (written to .env)"
+    # post-build.sh and test.sh re-source .env, so the file is how the URL reaches
+    # them; the per-chain source is updated too so use-chain.sh keeps it.
+    write_proxy_url "$PROJECT_DIR/.env" "$url"
+    [[ -n "${SOURCE_ENV_FILE:-}" && -f "${SOURCE_ENV_FILE:-}" ]] && write_proxy_url "$SOURCE_ENV_FILE" "$url"
+    log "Tunnel URL: $url  (written to .env)"
+}
+
+write_proxy_url() {
+    local f="$1" url="$2"
+    [[ -f "$f" ]] || return 0
+    if grep -q '^EXT_PROXY_URL=' "$f"; then
+        sed -i "s|^EXT_PROXY_URL=.*|EXT_PROXY_URL=$url|" "$f"
     else
-        log "Tunnel URL: $url  (no .env to update)"
+        printf 'EXT_PROXY_URL=%s\n' "$url" >> "$f"
     fi
 }
 
-if [[ "$CHAIN" == "local" ]]; then
-    [[ "$USE_TUNNEL" == "true" ]] && log "--tunnel ignored on --chain local (the proxy is reachable on localhost)"
-else
+# Simulated mode owns the tunnel; live mode only starts one when asked with --tunnel.
+if [[ "$CHAIN" == "local" && "$USE_TUNNEL" != "true" ]]; then
+    log "Local devnet — no tunnel; the proxy is reachable on localhost."
+elif [[ "$SIMULATED_TEE" == "true" || "$USE_TUNNEL" == "true" ]]; then
     sync_tunnel
+else
+    log "Live mode — not starting the tunnel (pass --tunnel to force one); EXT_PROXY_URL must already be reachable."
 fi
 
-# ============================================================
-# Docker Compose mode (default)
-# ============================================================
 if [[ "$USE_LOCAL" == "false" ]]; then
+    # A plain container cannot attest, so MODE=0 here is a config error.
+    [[ "$SIMULATED_TEE" == "true" ]] || die "SIMULATED_TEE=false with the local Docker stack: the container runs MODE=0 and cannot attest.
+  For a local stack:   ./scripts/use-chain.sh $CHAIN --simulated
+  For a devops TEE:    don't run start-services.sh — point EXT_PROXY_URL at their proxy and run post-build.sh"
+
     log "Starting services with Docker Compose..."
 
     # Dockerfile expects SOURCE_DATE_EPOCH for reproducible builds — see REPRODUCIBILITY.md.

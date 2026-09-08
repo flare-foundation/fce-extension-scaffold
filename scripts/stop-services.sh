@@ -94,13 +94,13 @@ else
     docker compose "${COMPOSE_FILES[@]}" down
 fi
 
-# Stopped last and only with --tunnel: other extensions reuse this container,
-# so tearing it down rotates their URL too.
+# Stopped last: simulated runs own the tunnel. Other extensions reuse this
+# container, so tearing it down rotates their URL too.
 CF_COMPOSE="$PROJECT_DIR/docker-compose.cloudflared.yaml"
 if [[ -f "$CF_COMPOSE" ]]; then
     CF_PROJ=()
     [[ "$USE_LOCAL" == "true" ]] && CF_PROJ=(-p tunnel-local)
-    if [[ "$USE_TUNNEL" == "true" ]]; then
+    if [[ "$USE_TUNNEL" == "true" || "${SIMULATED_TEE:-true}" == "true" ]]; then
         if docker compose "${CF_PROJ[@]}" -f "$CF_COMPOSE" ps -q cloudflared 2>/dev/null | grep -q .; then
             log "Stopping the shared Cloudflare tunnel (last)..."
             docker compose "${CF_PROJ[@]}" -f "$CF_COMPOSE" down || log "WARNING: failed to stop cloudflared"
