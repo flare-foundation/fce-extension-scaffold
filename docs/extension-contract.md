@@ -219,19 +219,28 @@ An extension registers handlers against `(opType, opCommand)` pairs, both compar
 | `GOVERNANCE_SIGNERS` | comma-separated governance signer addresses |
 | `GOVERNANCE_THRESHOLD` | governance threshold |
 
-An extension implementation itself only needs to read `EXTENSION_PORT` and `SIGN_PORT`; the rest are consumed by tee-node. All of them must still be *settable* on the container.
+An extension implementation itself only needs to read `EXTENSION_PORT` and `SIGN_PORT`; the rest are consumed by tee-node.
 
 ### Ports
 
-```dockerfile
-EXPOSE 5501 7701 7702
-```
+All three are loopback-only: tee-node and the extension run in one container and
+call each other over `localhost`, and the container dials *out* to the proxy via
+`PROXY_URL`. Nothing external connects in.
+
+**Do not `EXPOSE` them.** `EXPOSE` documents a port as externally reachable and
+makes `docker run -P` publish it — and `SIGN_PORT` signs and decrypts with the
+TEE key with no authentication.
 
 ### Launch policy label — required
 
 ```dockerfile
-LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE,CONFIG_PORT,SIGN_PORT,EXTENSION_PORT"
+LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE"
 ```
+
+The port variables are deliberately **absent**. Every name on this list can be
+changed at workload launch without changing the code hash, so listing
+`SIGN_PORT` would let an operator move the signing endpoint onto a port that is
+open on the VM, with nothing in review to catch it.
 
 Without this label, a GCP Confidential Space VM **rejects operator env overrides at attestation time** and whatever was baked into the image at build time is final. Every language image must carry an identical list — a mismatch produces a deployment that cannot be reconfigured, and the failure appears at attestation rather than at build.
 

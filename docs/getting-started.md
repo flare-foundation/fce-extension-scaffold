@@ -77,9 +77,10 @@ devops-hosted TEE, and `start-services.sh` refuses to bring up the local Docker
 stack because a plain container cannot attest. The clone happens once: later
 edits to `.env.<chain>` never reach an existing `.env.local.<chain>`.
 
-`--list` shows which chains exist; `-s` prints the active chain, mode, language
-and config files; `-v` shows the tee-node / tee-proxy pins against the latest
-upstream tags.
+`--language <lang>` switches implementation, rejecting one this repo has no
+`<lang>/language.env` for. `--list` shows which chains exist; `-s` prints the
+active chain, mode, language and config files; `-v` shows the tee-node /
+tee-proxy pins against the latest upstream tags.
 
 | Var | Default | Note |
 |---|---|---|

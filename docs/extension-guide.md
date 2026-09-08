@@ -337,7 +337,7 @@ Key types in the flow:
 
 ## Using the TEE Signing Port
 
-Extensions can request the TEE to sign data or perform cryptographic operations through the sign port (default: 9090, configurable via `SIGN_PORT`). This is useful for extensions that need to:
+Extensions can request the TEE to sign data or perform cryptographic operations through the sign port (default: 7701, configurable via `SIGN_PORT`). This is useful for extensions that need to:
 
 - Sign transactions on behalf of the TEE
 - Generate verifiable attestations

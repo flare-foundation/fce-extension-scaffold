@@ -63,7 +63,8 @@ chain-specific values. It never overwrites an existing file.
 bash ./scripts/use-chain.sh <chain>     # local | coston | coston2 | songbird | flare
 ```
 
-It cannot invent `config/<chain>/deployed-addresses.json` — copy that in first.
+Coston and Coston2 ship their `config/<chain>/deployed-addresses.json`. For
+songbird or flare, copy that dump in first — `use-chain.sh` cannot invent it.
 
 It writes `CHAIN`, `CHAIN_ID`, `CHAIN_URL`, `ADDRESSES_FILE`, `NORMAL_PROXY_URL`,
 `LOCAL_MODE=false` and `SIMULATED_TEE=false` itself. Two values are yours, in
@@ -103,17 +104,14 @@ The image built is selected by `LANGUAGE` in `.env` — `go/Dockerfile`, `python
 
 | Value | Meaning | Used for |
 |---|---|---|
-| `1` | Simulated attestation (test code hash) | local devnet — **the scaffold's default** |
+| `1` | Simulated attestation (test code hash) | local devnet — supplied by compose |
 | `0` | Production attestation | a real Confidential Space VM |
 
-**Every language's Dockerfile deliberately ships `MODE=1`**, so a bare `docker run` and the compose stack both work against the local devnet without extra configuration. `docker-compose.yaml` reinforces this with `MODE=${MODE:-1}`.
+**Every language's Dockerfile ships `MODE=0`**, so the image is production-safe as built and a release needs no edit. **FTDC rejects simulated attestation**, so that is the only value a real deploy may run with.
 
-**FTDC rejects simulated attestation**, so a production deploy must run with `MODE=0`. You have two options, and the second is preferred:
+Local dev gets `MODE=1` from `docker-compose.yaml` (`MODE=${MODE:-1}`); `start-services.sh` derives it from `SIMULATED_TEE` so the tooling and the container cannot disagree. A bare `docker run` against the devnet needs `-e MODE=1` — the `tee.launch_policy.allow_env_override` label lists `MODE`, so an override is accepted either way.
 
-1. Edit `ENV MODE=1` → `ENV MODE=0` in your `<LANGUAGE>/Dockerfile` before building the release image.
-2. **Leave the image as-is and override at workload launch.** The `tee.launch_policy.allow_env_override` label lists `MODE`, so the Confidential Space VM accepts an override — and without that label it would reject one. This keeps a single image usable for both local dev and production, and keeps the code hash independent of which environment it is destined for.
-
-Whichever you choose, verify what actually ended up in the image before registering its hash on-chain — see the check at the end of this section.
+Verify what actually ended up in the image before registering its hash on-chain — see the check at the end of this section.
 
 Then build:
 
@@ -144,7 +142,7 @@ Check which mode is baked into the image:
 docker inspect <your-extension>:v0.1.0 --format '{{range .Config.Env}}{{println .}}{{end}}' | Select-String MODE
 ```
 
-If you took option 1 above, expect `MODE=0`. If you took option 2, expect the scaffold default `MODE=1` and supply `MODE=0` at workload launch instead — confirm the launch policy label permits it:
+Expect `MODE=0`. If anything else comes back, the image was built from an edited Dockerfile — rebuild before registering its hash. The launch policy must still list `MODE` for local overrides to work:
 
 ```powershell
 docker inspect <your-extension>:v0.1.0 --format '{{index .Config.Labels "tee.launch_policy.allow_env_override"}}'
