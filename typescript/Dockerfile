@@ -86,9 +86,7 @@ USER 0:0
 
 # Must match go/Dockerfile's list exactly — a mismatch means Confidential Space
 # silently rejects operator env overrides at attestation time.
-LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE,CONFIG_PORT,SIGN_PORT,EXTENSION_PORT"
-
-EXPOSE 5501 7701 7702
+LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE"
 
 # Two-process layout: tee-node ./server handles config/sign and forwards actions
 # to the extension on EXTENSION_PORT. If either dies the container exits so the
