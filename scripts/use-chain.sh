@@ -7,6 +7,7 @@
 #
 #   ./scripts/use-chain.sh <chain>       local | coston | coston2 | songbird | flare
 #   ./scripts/use-chain.sh --list        List chains with a .env.<chain> file.
+#   ./scripts/use-chain.sh -s | --status Show the active chain, mode and config files.
 #   ./scripts/use-chain.sh -h | --help   Show this help.
 #
 # What it does for <chain>, creating anything missing (never overwriting):
@@ -37,10 +38,15 @@ usage() {
 use-chain.sh — Scaffold and activate everything one chain needs.
 
 Usage:
-  $SCRIPT_NAME <chain>          ${CHAINS// / | }
+  $SCRIPT_NAME <chain> [--simulated]
+                                ${CHAINS// / | }
   $SCRIPT_NAME --list           List chains with a .env.<chain> file.
+  $SCRIPT_NAME -s | --status    Show the active chain, mode, language and config files.
   $SCRIPT_NAME -v | --versions  Show the tee-node / tee-proxy versions in use vs latest upstream.
   $SCRIPT_NAME -h | --help      Show this help.
+
+--simulated activates .env.local.<chain>: SIMULATED_TEE=true and a locally-run
+ext-proxy, still against the real chain.
 
 Creates any missing per-chain files (.env.<chain>, proxy toml, compose
 override), then activates the chain by copying .env.<chain> to .env. Existing
@@ -56,17 +62,95 @@ get_val() {
         | tr -d '"' || true
 }
 
+# Value of toml key $2 in file $1 (quotes/comments stripped); empty if unset.
+toml_val() {
+    grep -E "^$2[[:space:]]*=" "$1" 2>/dev/null | head -1 \
+        | sed -E 's/^[^=]*=[[:space:]]*//; s/[[:space:]]+#.*$//' | tr -d '"' || true
+}
+
 list_chains() {
-    local any=0 f name active
+    local any=0 f name active sim
     active=$(get_val "$PROJECT_DIR/.env" CHAIN)
     for f in "$PROJECT_DIR"/.env.*; do
         [[ -f "$f" ]] || continue
         name="${f##*/.env.}"
-        case "$name" in example|template|sample|backup*) continue ;; esac
-        [[ "$name" == "$active" ]] && echo "  $name (active)" || echo "  $name"
+        # local.<chain> is the simulated variant of a chain, not a chain.
+        case "$name" in example|template|sample|backup*|local.*) continue ;; esac
+        sim=""; [[ -f "$PROJECT_DIR/.env.local.$name" ]] && sim=" [+simulated]"
+        [[ "$name" == "$active" ]] && echo "  $name (active)$sim" || echo "  $name$sim"
         any=1
     done
     [[ $any -eq 1 ]] || echo "  (none yet — run: $SCRIPT_NAME <chain>)"
+}
+
+# ok/MISSING marker for a path.
+mark() { [[ -e "$1" ]] && echo "ok" || echo "MISSING"; }
+lower() { tr '[:upper:]' '[:lower:]' <<< "${1:-}"; }
+
+show_status() {
+    local env="$PROJECT_DIR/.env"
+    [[ -f "$env" ]] || { echo "  no .env yet — run: $SCRIPT_NAME <chain>"; return; }
+
+    local chain sim lm lang cid src mode f
+    chain=$(get_val "$env" CHAIN);      sim=$(get_val "$env" SIMULATED_TEE)
+    lm=$(get_val "$env" LOCAL_MODE);    lang=$(get_val "$env" LANGUAGE)
+    cid=$(get_val "$env" CHAIN_ID)
+
+    # Simulated mode on a testnet is activated from .env.local.<chain>.
+    if [[ "$sim" == "true" && "$chain" != "local" ]]; then src=".env.local.$chain"; else src=".env.$chain"; fi
+    [[ "$sim" == "true" ]] && mode="simulated" || mode="live"
+    [[ "$lm" == "true" ]] && mode="$mode / local devnet"
+
+    printf '  %-12s %s%s\n' "chain"    "${chain:-<unset>}" "${cid:+ (id $cid)}"
+    printf '  %-12s %s\n'   "mode"     "$mode"
+    printf '  %-12s %s\n'   "language" "${lang:-go (default)}"
+    printf '  %-12s %s\n'   "from"     "$src"
+    printf '  %-12s %s\n'   "chain URL" "$(get_val "$env" CHAIN_URL)"
+    local xp; xp=$(get_val "$env" EXT_PROXY_URL || true)
+    printf '  %-12s %s\n'   "ext proxy" "${xp:-(unset — supplied by devops or the tunnel)}"
+
+    local ext="$PROJECT_DIR/config/$chain/extension.env"
+    [[ -f "$ext" ]] && printf '  %-12s %s\n' "sender" "$(get_val "$ext" INSTRUCTION_SENDER)"
+
+    # The proxy toml carries copies of these; a stale copy talks to an old Relay.
+    local toml="$PROJECT_DIR/config/proxy/extension_proxy.$chain.docker.toml"
+    local dump="$PROJECT_DIR/config/$chain/deployed-addresses.json"
+
+    if [[ -f "$toml" ]]; then
+        local dbh dbp dbn dbu dbw note=""
+        dbh=$(toml_val "$toml" host); dbp=$(toml_val "$toml" port)
+        dbn=$(toml_val "$toml" database); dbu=$(toml_val "$toml" username)
+        dbw=$(toml_val "$toml" password)
+        # A shipped .example still holds <placeholders>; the proxy cannot connect.
+        case "$dbh$dbn$dbu$dbw" in *"<"*) note="  PLACEHOLDER — fill in the [db] block" ;; esac
+        [[ -n "$dbw" ]] || note="  no password set"
+        printf '  %-12s %s@%s:%s/%s%s\n' "indexer db" "${dbu:-<unset>}" "${dbh:-<unset>}" "${dbp:-?}" "${dbn:-<unset>}" "$note"
+    fi
+
+    if [[ -f "$toml" && -f "$dump" ]]; then
+        echo "  addresses    (proxy toml vs deployed-addresses.json)"
+        local k n tv dv st
+        while IFS=: read -r k n; do
+            [[ -n "$k" ]] || continue
+            tv=$(toml_val "$toml" "$k")
+            dv=$(jq -r --arg n "$n" '.[]|select(.name==$n)|.address' "$dump" 2>/dev/null | head -1)
+            if [[ "$(lower "$tv")" == "$(lower "$dv")" && -n "$tv" ]]; then st="ok"; else st="DRIFT"; fi
+            printf '    %-22s %-44s %s\n' "$k" "${tv:-<unset>}" "$st"
+        done <<EOF
+relay:Relay
+flare_systems_manager:FlareSystemsManager
+voter_registry:VoterRegistry
+EOF
+    fi
+
+    echo "  files"
+    for f in "$src" \
+             "config/$chain/deployed-addresses.json" \
+             "config/$chain/extension.env" \
+             "config/proxy/extension_proxy.$chain.docker.toml" \
+             "docker-compose.$chain.yaml"; do
+        printf '    %-50s %s\n' "$f" "$(mark "$PROJECT_DIR/$f")"
+    done
 }
 
 # Address of contract $2 in deployed-addresses.json $1.
@@ -116,6 +200,12 @@ show_versions() {
     node_latest=$(latest_tag tee-node)
     proxy_latest=$(latest_tag tee-proxy)
 
+    local sim mode
+    sim=$(get_val "$PROJECT_DIR/.env" SIMULATED_TEE); sim="${sim:-true}"
+    [[ "$sim" == "true" ]] && mode="simulated (MODE=1)" || mode="live (MODE=0, devops-hosted TEE)"
+    printf '  %-10s %s · %s
+' active "$(v=$(get_val "$PROJECT_DIR/.env" CHAIN); echo "${v:-<unset>}")" "$mode"
+
     printf "$fmt" tee-node  "${node:-<unset>}"     "${node_latest:-?}"  "$(state "$node" "$node_latest")"
     printf "$fmt" tee-proxy "${proxy:-<unpinned>}" "${proxy_latest:-?}" "$(state "$proxy" "$proxy_latest")"
 
@@ -137,18 +227,26 @@ show_versions() {
 case "$1" in
     -h|--help) usage; exit 0 ;;
     --list)    log "available chains:"; list_chains; exit 0 ;;
+    -s|--status) log "status:"; show_status; exit 0 ;;
     -v|--versions) log "versions:"; show_versions; exit 0 ;;
-    -*)        die "unknown flag: $1 (try --help)" ;;
 esac
-[[ $# -eq 1 ]] || die "expected one chain name (got $#); try --help"
 
-CHAIN="$1"
+CHAIN=""; SIMULATED=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --simulated) SIMULATED=true; shift ;;
+        -*) die "unknown flag: $1 (try --help)" ;;
+        *)  [[ -z "$CHAIN" ]] || die "unexpected argument: $1 (try --help)"; CHAIN="$1"; shift ;;
+    esac
+done
+[[ -n "$CHAIN" ]] || { usage; exit 1; }
 valid_chain "$CHAIN" || die "unknown chain '$CHAIN' (expected ${CHAINS// /, })"
 IS_LOCAL=false; [[ "$CHAIN" == "local" ]] && IS_LOCAL=true
 CHAIN_ID=""
 
 ADDR_JSON="$PROJECT_DIR/config/$CHAIN/deployed-addresses.json"
 ENV_FILE="$PROJECT_DIR/.env.$CHAIN"
+SIM_ENV_FILE="$PROJECT_DIR/.env.local.$CHAIN"
 ACTIVE_ENV="$PROJECT_DIR/.env"
 TOML_DOCKER="$PROJECT_DIR/config/proxy/extension_proxy.$CHAIN.docker.toml"
 COMPOSE="$PROJECT_DIR/docker-compose.$CHAIN.yaml"
@@ -176,12 +274,14 @@ fi
 ensure_nl() { [[ -s "$1" && -n "$(tail -c1 "$1")" ]] && printf '\n' >> "$1"; return 0; }
 
 # Replace KEY $1 line with KEY=$2 in $ENV_FILE (append if absent).
+# set_kv KEY VALUE [file] — defaults to $ENV_FILE.
 set_kv() {
-    if grep -qE "^$1=" "$ENV_FILE"; then
-        sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+    local f="${3:-$ENV_FILE}"
+    if grep -qE "^$1=" "$f"; then
+        sed -i "s|^$1=.*|$1=$2|" "$f"
     else
-        ensure_nl "$ENV_FILE"
-        printf '%s=%s\n' "$1" "$2" >> "$ENV_FILE"
+        ensure_nl "$f"
+        printf '%s=%s\n' "$1" "$2" >> "$f"
     fi
 }
 
@@ -190,6 +290,10 @@ set_kv() {
 # only the chain-specific values. Falls back to .env.example on a fresh clone.
 if [[ -f "$ENV_FILE" ]]; then
     log "keep    .env.$CHAIN (exists)"
+    # Chain-derived and never user-owned, so re-assert them: a file written
+    # before these keys existed would otherwise stay without them.
+    set_kv CHAIN "$CHAIN"
+    [[ "$IS_LOCAL" == "true" ]] || set_kv CHAIN_ID "$CHAIN_ID"
 else
     donor=""
     if [[ -f "$ACTIVE_ENV" ]]; then
@@ -225,6 +329,27 @@ else
     log "created .env.$CHAIN (cloned from ${donor##*/}${donor_chain:+ [$donor_chain]}, chain values rewritten)"
 fi
 
+# --- 1b. .env.local.<chain> — the simulated variant, cloned from the real one ---
+if [[ "$SIMULATED" == "true" && "$IS_LOCAL" == "false" ]]; then
+    if [[ -f "$SIM_ENV_FILE" ]]; then
+        log "keep    .env.local.$CHAIN (exists)"
+    else
+        cp "$ENV_FILE" "$SIM_ENV_FILE"
+        set_kv SIMULATED_TEE true "$SIM_ENV_FILE"
+        set_kv EXT_PROXY_URL "" "$SIM_ENV_FILE"
+        warn "EXT_PROXY_URL left empty in .env.local.$CHAIN — set it to your tunnel URL"
+        log "created .env.local.$CHAIN (simulated TEE, local ext-proxy)"
+    fi
+    set_kv SIMULATED_TEE true "$SIM_ENV_FILE"
+    set_kv CHAIN "$CHAIN" "$SIM_ENV_FILE"
+    set_kv CHAIN_ID "$CHAIN_ID" "$SIM_ENV_FILE"
+    SOURCE_ENV="$SIM_ENV_FILE"
+else
+    # The flag decides the mode; without it the chain is live.
+    [[ "$IS_LOCAL" == "true" ]] || set_kv SIMULATED_TEE false "$ENV_FILE"
+    SOURCE_ENV="$ENV_FILE"
+fi
+
 # --- 2. Proxy toml (Docker) — from the committed example, addresses from the dump ---
 if [[ "$IS_LOCAL" == "true" ]]; then
     :   # local uses the committed extension_proxy.docker.toml
@@ -233,12 +358,6 @@ elif [[ -f "$TOML_DOCKER" ]]; then
 else
     TOML_TEMPLATE="$PROJECT_DIR/config/proxy/extension_proxy.coston2.docker.toml.example"
     [[ -f "$TOML_TEMPLATE" ]] || die "${TOML_TEMPLATE#"$PROJECT_DIR"/} missing — nothing to template the proxy config from"
-
-    # Value of toml key $2 in file $1 (quotes/comments stripped); empty if unset.
-    toml_val() {
-        grep -E "^$2[[:space:]]*=" "$1" 2>/dev/null | head -1 \
-            | sed -E 's/^[^=]*=[[:space:]]*//; s/[[:space:]]+#.*$//' | tr -d '"' || true
-    }
 
     # Carry the [db] block from another chain toml — the indexer DB credentials are
     # usually shared, and a real value beats a placeholder. Reported below so it
@@ -305,7 +424,7 @@ if [[ -f "$ACTIVE_ENV" ]]; then
         warn ".env had edits not saved in any .env.<chain> — copied to .env.backup (edit .env.<chain> files, not .env)"
     fi
 fi
-cp "$ENV_FILE" "$ACTIVE_ENV" || die "failed to copy $ENV_FILE to .env"
+cp "$SOURCE_ENV" "$ACTIVE_ENV" || die "failed to copy $SOURCE_ENV to .env"
 # Older hand-written env files may predate the CHAIN= convention.
 if ! grep -qE '^CHAIN=' "$ACTIVE_ENV"; then
     ensure_nl "$ACTIVE_ENV"
