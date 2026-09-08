@@ -70,10 +70,9 @@ RUN if [ "${SOURCE_DATE_EPOCH:-0}" -gt 0 ] 2>/dev/null; then find /app -exec tou
 
 # Ports and mode match go/Dockerfile so compose works uniformly across languages.
 #
-# MODE=1 is SIMULATED attestation (local dev); MODE=0 is production attestation.
-# For a real Confidential Space deploy this MUST be 0 — FTDC rejects simulated
-# attestation. See docs/deployment-steps.md §5.
-ENV MODE=1 CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
+# Production mode by default; docker-compose.yaml overrides to MODE=1 for local dev.
+# FTDC rejects simulated attestation, so a real deploy MUST stay 0.
+ENV MODE=0 CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
 # Unbuffered stdout so container logs appear promptly.
 ENV PYTHONUNBUFFERED=1
 # Keep .pyc out of the image; they would vary by build host.
