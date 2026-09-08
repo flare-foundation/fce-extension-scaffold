@@ -28,6 +28,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCRIPT_NAME="$(basename "$0")"
 source "$SCRIPT_DIR/chain-env.sh"   # chain table: CHAINS, valid_chain, chain_id_for
+source "$SCRIPT_DIR/lib/language.sh"   # list_languages — the */language.env convention
 
 log()  { echo "[use-chain] $*"; }
 warn() { echo "[use-chain] WARN: $*" >&2; }
@@ -38,7 +39,7 @@ usage() {
 use-chain.sh — Scaffold and activate everything one chain needs.
 
 Usage:
-  $SCRIPT_NAME <chain> [--simulated]
+  $SCRIPT_NAME <chain> [--simulated] [--language <lang>]
                                 ${CHAINS// / | }
   $SCRIPT_NAME --list           List chains with a .env.<chain> file.
   $SCRIPT_NAME -s | --status    Show the active chain, mode, language and config files.
@@ -103,7 +104,11 @@ show_status() {
 
     printf '  %-12s %s%s\n' "chain"    "${chain:-<unset>}" "${cid:+ (id $cid)}"
     printf '  %-12s %s\n'   "mode"     "$mode"
-    printf '  %-12s %s\n'   "language" "${lang:-go (default)}"
+    local lnote="" others
+    [[ -n "$lang" && ! -f "$PROJECT_DIR/$lang/language.env" ]] && lnote="  NOT IMPLEMENTED HERE"
+    others=$(list_languages "$PROJECT_DIR" | grep -vx "${lang:-go}" | tr '\n' ' ')
+    [[ -n "$others" ]] && lnote="$lnote  (also: ${others% })"
+    printf '  %-12s %s%s\n' "language" "${lang:-go (default)}" "$lnote"
     printf '  %-12s %s\n'   "from"     "$src"
     printf '  %-12s %s\n'   "chain URL" "$(get_val "$env" CHAIN_URL)"
     local xp; xp=$(get_val "$env" EXT_PROXY_URL || true)
@@ -231,16 +236,23 @@ case "$1" in
     -v|--versions) log "versions:"; show_versions; exit 0 ;;
 esac
 
-CHAIN=""; SIMULATED=false
+CHAIN=""; SIMULATED=false; LANGUAGE_ARG=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --simulated) SIMULATED=true; shift ;;
+        --language)  LANGUAGE_ARG="${2:-}"; shift 2 ;;
         -*) die "unknown flag: $1 (try --help)" ;;
         *)  [[ -z "$CHAIN" ]] || die "unexpected argument: $1 (try --help)"; CHAIN="$1"; shift ;;
     esac
 done
 [[ -n "$CHAIN" ]] || { usage; exit 1; }
 valid_chain "$CHAIN" || die "unknown chain '$CHAIN' (expected ${CHAINS// /, })"
+
+# A language exists iff <dir>/language.env does — validate before any side effect.
+if [[ -n "$LANGUAGE_ARG" ]]; then
+    [[ -f "$PROJECT_DIR/$LANGUAGE_ARG/language.env" ]] \
+        || die "no '$LANGUAGE_ARG' implementation here (available: $(list_languages "$PROJECT_DIR" | tr '\n' ' '))"
+fi
 IS_LOCAL=false; [[ "$CHAIN" == "local" ]] && IS_LOCAL=true
 CHAIN_ID=""
 
@@ -424,6 +436,16 @@ if [[ -f "$ACTIVE_ENV" ]]; then
         warn ".env had edits not saved in any .env.<chain> — copied to .env.backup (edit .env.<chain> files, not .env)"
     fi
 fi
+[[ -n "$LANGUAGE_ARG" ]] && set_kv LANGUAGE "$LANGUAGE_ARG" "$SOURCE_ENV"
+
+# Carried over from the donor .env, so it may name a language this repo lacks.
+CUR_LANG=$(get_val "$SOURCE_ENV" LANGUAGE)
+if [[ -n "$CUR_LANG" && ! -f "$PROJECT_DIR/$CUR_LANG/language.env" ]]; then
+    die "${SOURCE_ENV##*/} sets LANGUAGE=$CUR_LANG, which has no $CUR_LANG/language.env here.
+  Available: $(list_languages "$PROJECT_DIR" | tr '\n' ' ')
+  Fix it there, or pass --language <one of the above>."
+fi
+
 cp "$SOURCE_ENV" "$ACTIVE_ENV" || die "failed to copy $SOURCE_ENV to .env"
 # Older hand-written env files may predate the CHAIN= convention.
 if ! grep -qE '^CHAIN=' "$ACTIVE_ENV"; then
