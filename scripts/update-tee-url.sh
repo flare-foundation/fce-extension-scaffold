@@ -20,13 +20,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/chain-env.sh"   # chain table + resolve_chain
 
 set -a; source "$PROJECT_DIR/.env"; set +a
+resolve_chain_default   # sets CHAIN + CHAIN_CONFIG_DIR
 
 URL="${1:-${EXT_PROXY_URL:?EXT_PROXY_URL not set}}"
 RPC="${CHAIN_URL:?CHAIN_URL not set}"
 KEY="0x${DEPLOYMENT_PRIVATE_KEY#0x}"
-ADDRESSES_FILE="${ADDRESSES_FILE:-./config/coston2/deployed-addresses.json}"
+ADDRESSES_FILE="${ADDRESSES_FILE:-$CHAIN_CONFIG_DIR/deployed-addresses.json}"
 [[ "$ADDRESSES_FILE" != /* ]] && ADDRESSES_FILE="$PROJECT_DIR/$ADDRESSES_FILE"
 LOCAL_INFO="${LOCAL_INFO_URL:-http://localhost:6674/info}"
 
