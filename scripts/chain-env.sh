@@ -12,6 +12,7 @@ valid_chain() { [[ " $CHAINS " == *" ${1:-} "* ]]; }
 # Empty for local — its proxy config carries whatever the devnet was built with.
 chain_id_for() {
     case "${1:-}" in
+        local) echo 31337 ;;
         coston) echo 16 ;; coston2) echo 114 ;; songbird) echo 19 ;; flare) echo 14 ;;
         *) return 1 ;;
     esac

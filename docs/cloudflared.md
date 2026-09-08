@@ -4,8 +4,11 @@ Exposes the extension proxy's external port (host `6674`) over a public HTTPS UR
 Flare's TEE infrastructure can reach it. Use instead of ngrok. Compose file:
 `docker-compose.cloudflared.yaml`.
 
-Only testnets need this. On `--chain local` nothing is started — a local devnet reaches
-the proxy on localhost.
+**Simulated mode owns the tunnel.** `start-services.sh` starts it whenever
+`SIMULATED_TEE=true` — which `use-chain.sh <chain> --simulated` sets — and leaves
+it alone when `SIMULATED_TEE=false`, because a devops-hosted TEE already has a
+reachable proxy. `--chain local` never gets one — a devnet reaches the proxy on
+`localhost`. Pass `--tunnel` to force one in live mode.
 
 ## The scripts drive it
 
@@ -14,17 +17,21 @@ into `.env` as `EXT_PROXY_URL`. `full-setup.sh` calls it in Phase 2, and `post-b
 `test.sh` re-read `.env`, so a whole run picks the URL up by itself:
 
 ```bash
-./scripts/full-setup.sh --chain coston2 --tunnel --test
+./scripts/use-chain.sh coston2 --simulated
+./scripts/full-setup.sh --chain coston2 --test
 ```
 
 | Situation | What `start-services.sh` does |
 |---|---|
-| Tunnel already running | Reuses it and adopts its URL — no flag needed |
-| No tunnel, `--tunnel` passed | Starts it, waits for the URL, writes `EXT_PROXY_URL` |
-| No tunnel, no `--tunnel` | Warns; `EXT_PROXY_URL` must already be valid in `.env` |
+| `--chain local` | Never starts one — the proxy is on `localhost` |
+| `SIMULATED_TEE=true`, tunnel already running | Reuses it and adopts its URL |
+| `SIMULATED_TEE=true`, no tunnel | Starts it, waits for the URL, writes `EXT_PROXY_URL` to `.env` **and** the per-chain env file |
+| `SIMULATED_TEE=false` | Leaves it alone — `EXT_PROXY_URL` must already point at the devops proxy |
+| `SIMULATED_TEE=false` + `--tunnel` | Starts one anyway — the override, for testing a live chain through your own tunnel |
 | `TUNNEL_ARGS` set (named tunnel) | Starts it and leaves your `EXT_PROXY_URL` alone |
 
-`stop-services.sh` leaves the tunnel up unless you pass `--tunnel` — see below.
+`stop-services.sh` stops the tunnel when `SIMULATED_TEE=true` or `--tunnel` is
+passed, and leaves it up otherwise — see below.
 
 ## One tunnel, shared by every extension
 
@@ -38,8 +45,9 @@ running and inherits its URL. That works because every extension here publishes 
 on host `6674`, so only one stack is ever behind the tunnel; it is handed from extension to
 extension, keeping one URL across the switch.
 
-That is also why `stop-services.sh` keeps it alive by default: tearing it down rotates the
-URL for every other extension and strands their `EXT_PROXY_URL`.
+That is why live mode leaves it alone: tearing it down rotates the URL for every other
+extension and strands their `EXT_PROXY_URL`. A simulated run owns the tunnel it started,
+so `stop-services.sh` takes it down again.
 
 **Copy `docker-compose.cloudflared.yaml` verbatim.** Compose compares the *resolved service
 config* to decide reuse-vs-recreate. Comments and file paths are not part of that

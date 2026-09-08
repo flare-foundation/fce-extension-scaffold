@@ -36,10 +36,12 @@ LANGUAGE=go ./scripts/full-setup.sh --test      # or python, typescript
 That chains pre-build (deploy + register) → start-services (node, proxy, redis) →
 post-build (allow version, set governance, register TEE) → `test.sh`.
 
-For Coston2, add a tunnel so the proxy is publicly reachable:
+For a testnet, pick simulated or live first — `--simulated` runs the TEE locally
+behind a Cloudflare tunnel, without it you point at a devops-hosted TEE:
 
 ```bash
-./scripts/full-setup.sh --chain coston2 --tunnel --test
+./scripts/use-chain.sh coston2 --simulated   # writes .env.local.coston2, activates it
+./scripts/full-setup.sh --chain coston2 --test
 ```
 
 ## Verify it works
@@ -59,15 +61,32 @@ A passing run prints `Hello, World! Welcome to Flare Confidential Compute.` and
 the proxy toml and the compose override for that chain (never overwriting), then
 copies `.env.<chain>` to `.env`. Edit `.env.<chain>`, not `.env` — `.env` is a
 disposable copy. Chains: `local`, `coston`, `coston2`, `songbird`, `flare`.
-`--list` shows which ones exist; `-v` shows the tee-node / tee-proxy pins against
-the latest upstream tags.
+
+| Command | Creates | Activated as `.env` |
+|---|---|---|
+| `use-chain.sh local` | `.env.local` | `.env.local` |
+| `use-chain.sh coston` | `.env.coston` | `.env.coston` |
+| `use-chain.sh coston --simulated` | `.env.coston`, then `.env.local.coston` | `.env.local.coston` |
+| `use-chain.sh coston2` | `.env.coston2` | `.env.coston2` |
+| `use-chain.sh coston2 --simulated` | `.env.coston2`, then `.env.local.coston2` | `.env.local.coston2` |
+
+`--simulated` runs the TEE yourself against a real chain: the simulated file is
+*cloned from the live one* with `SIMULATED_TEE=true`, so the stack runs `MODE=1`
+behind a Cloudflare tunnel. Without it the chain is *live* — `MODE=0`, a
+devops-hosted TEE, and `start-services.sh` refuses to bring up the local Docker
+stack because a plain container cannot attest. The clone happens once: later
+edits to `.env.<chain>` never reach an existing `.env.local.<chain>`.
+
+`--list` shows which chains exist; `-s` prints the active chain, mode, language
+and config files; `-v` shows the tee-node / tee-proxy pins against the latest
+upstream tags.
 
 | Var | Default | Note |
 |---|---|---|
 | `LANGUAGE` | `go` | which implementation directory gets built |
 | `DEPLOYMENT_PRIVATE_KEY` | Hardhat dev key | funded deployer |
 | `CHAIN_URL` / `CHAIN_ID` | written per chain by `use-chain.sh` | local `31337`, coston `16`, coston2 `114`. `CHAIN_ID` is **required** — unset leaves `chainID=0` and every TEE signature comes back empty |
-| `SIMULATED_TEE` | `true` local, `false` testnet | must be **`false`** on real Confidential hardware |
+| `SIMULATED_TEE` | `true` unless `use-chain.sh` ran without `--simulated` | drives `MODE` (`1`/`0`) and decides who owns the tunnel; `false` means a devops-hosted TEE |
 | `EXT_PROXY_URL` | left empty by `use-chain.sh` | this extension's proxy; must be publicly reachable on testnets |
 | `NORMAL_PROXY_URL` | `localhost:6662` local, `tee-proxy-<chain>-1.flare.rocks` testnet | the infrastructure FTDC proxy (post-build) |
 | `ADDRESSES_FILE` | `config/<chain>/…` on testnets | empty on local, where the sim_dump is auto-detected |
@@ -116,7 +135,7 @@ development. `post-build.sh` registers the set on-chain idempotently before
 
 ```bash
 ./scripts/stop-services.sh --chain local
-./scripts/stop-services.sh --chain coston2 --tunnel   # also stops the tunnel
+./scripts/stop-services.sh --chain coston2 --tunnel   # force-stop the tunnel in live mode
 ```
 
 ## Common failures

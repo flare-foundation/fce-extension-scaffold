@@ -65,15 +65,17 @@ Counters are in memory, so the numbers restart at 1 after any TEE relaunch.
 
 ## Testing a local proxy against Coston2
 
-The proxy must be publicly reachable for FTDC data providers to answer it. Start
-the tunnel and let the scripts wire the URL in:
+The proxy must be publicly reachable for FTDC data providers to answer it, which
+is what simulated mode sets up:
 
 ```bash
-./scripts/full-setup.sh --chain coston2 --tunnel --test
+./scripts/use-chain.sh coston2 --simulated
+./scripts/full-setup.sh --chain coston2 --test
 ```
 
-That writes the tunnel URL into `.env` as `EXT_PROXY_URL`, so `post-build.sh` and
-`test.sh` pick it up. Details in [cloudflared.md](cloudflared.md).
+`start-services.sh` starts the tunnel and writes its URL as `EXT_PROXY_URL` into
+both `.env` and `.env.local.coston2`, so `post-build.sh` and `test.sh` pick it up.
+Details in [cloudflared.md](cloudflared.md).
 
 ## If something's blocked
 

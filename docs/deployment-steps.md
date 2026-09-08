@@ -230,11 +230,16 @@ to a dead node roughly half the time and silently never complete (`/action/resul
 cd tools && source ../.env && source "../config/$CHAIN/extension.env"
 DIAMOND=$(jq -r '.[]|select(.name=="FlareTeeManager").address' ../config/$CHAIN/deployed-addresses.json)
 go run ./cmd/query-tee -ext "$((EXTENSION_ID))" -reg "$DIAMOND" -rpc "$CHAIN_URL"   # getActiveTeeMachines
-cast send "$DIAMOND" 'pause(address)' <staleTeeId> --rpc-url "$CHAIN_URL" --private-key "$KEY"
+cast send "$DIAMOND" 'pause(address)' <staleTeeId> --rpc-url "$CHAIN_URL" --chain "$CHAIN_ID" --private-key "$KEY"
 ```
 
+`./scripts/check-tee-machines.sh --chain <chain>` does the comparison for you and
+prints the `pause` command for anything stale.
+
 `-ext` is **decimal**, not the bytes32 hex — `$((EXTENSION_ID))` converts it. `-reg`
-defaults to a stale address; always pass the diamond.
+defaults to a stale address; always pass the diamond. `--chain "$CHAIN_ID"` is not
+optional: Foundry auto-loads `.env`, and its `CHAIN=coston2` collides with cast's
+own `--chain` flag, aborting with `invalid value 'coston2' for '--chain <CHAIN>'`.
 
 The live `teeId` is `keccak256(pubkey.x ‖ pubkey.y)[12:]` from the proxy's `/info`.
 There is no `unpause` — only `toProduction` with a fresh availability proof — so
@@ -264,6 +269,12 @@ crane copy <src>@sha256:<digest> <dst>@sha256:<digest>
 ```
 
 ### `SIMULATED_TEE=false` on real hardware
+
+It also picks the workflow. `false` is *live*: `MODE=0`, a devops-hosted TEE, and
+`start-services.sh` refuses the local Docker stack — a plain container cannot
+attest, so it would register a code hash FTDC rejects. Run the TEE yourself with
+`./scripts/use-chain.sh <chain> --simulated`; point at someone else's with
+`EXT_PROXY_URL` and `post-build.sh` alone.
 
 And `CHAIN_ID` must be set — unset leaves `chainID=0` and every signature comes back
 empty (`signature must be 65 bytes, got 0`).
