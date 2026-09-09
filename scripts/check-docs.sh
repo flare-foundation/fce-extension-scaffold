@@ -27,7 +27,7 @@ ok()   { echo -e "${GREEN}ok${NC}    $*"; }
 ONE_SHOT_SETTER="setExtensionId"
 
 REQUIRED="getting-started.md deployment-steps.md testing.md testing-against-coston2.md architecture.md cloudflared.md"
-SCAFFOLD="extension-guide.md instruction-sender.md manual-setup.md types-server.md"
+SCAFFOLD="extension-guide.md instruction-sender.md manual-setup.md"
 MAX_LINES=400   # past this a tester stops reading; split or cut
 
 echo "docs: $DOCS"
