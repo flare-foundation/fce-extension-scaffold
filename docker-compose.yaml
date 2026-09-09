@@ -33,7 +33,7 @@ services:
         # pseudo-version pin is a commit SHA, not a tag — see scripts/lib/versions.sh.
         TEE_NODE_REF: ${TEE_NODE_REF:-}
     env_file:
-      - path: ./config/extension.env
+      - path: ./config/${CHAIN:-local}/extension.env
         required: false
     environment:
       - MODE=${MODE:-1}

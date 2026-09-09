@@ -130,7 +130,7 @@ The test runner (`tools/cmd/run-test/main.go`) executes this lifecycle:
 1. SetExtensionId()         ← Generic: tells the contract its extension ID (idempotent)
 2. Send instruction          ← YOUR CODE: call your contract function with your payload
 3. Wait for TEE processing   ← Generic: time.Sleep(5s)
-4. Poll for result            ← Generic: utils.ActionResult() polls proxy (15 retries, 2s apart)
+4. Poll for result            ← Generic: fccutils.ActionResult() polls proxy (15 retries, 2s apart)
 5. Validate response          ← YOUR CODE: unmarshal Data into your type, check your fields
 ```
 
@@ -169,11 +169,9 @@ payload, _ := json.Marshal(map[string]interface{}{
 })
 instructionId, _, err := instrutils.SendSayHello(s, addr, payload)
 
-// SAY_GOODBYE test case
-payload, _ = json.Marshal(map[string]interface{}{
-    "name": "World",
-})
-instructionId, _, err = instrutils.SendSayGoodbye(s, addr, payload)
+// SAY_GOODBYE test case — ABI-encoded (string,string), so the binding
+// takes typed args rather than a JSON payload
+instructionId, _, err = instrutils.SendSayGoodbye(s, addr, "World", "heading out")
 ```
 
 Replace the payloads with whatever your contract functions expect. If your Solidity contract has multiple send functions, you'll need to add corresponding Go helpers in `tools/pkg/utils/instructions.go` and call them here.

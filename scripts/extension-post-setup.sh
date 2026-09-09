@@ -13,7 +13,7 @@
 #   - Granting the registered TEE node any extension-specific on-chain roles.
 #   - Seeding on-chain state that depends on knowing which TEE is active.
 #
-# The following variables are available (sourced from .env + config/extension.env):
+# The following variables are available (sourced from .env + config/<chain>/extension.env):
 #
 #   INSTRUCTION_SENDER     — your deployed InstructionSender contract address
 #   EXTENSION_ID           — your extension's ID on the TeeExtensionRegistry
@@ -38,6 +38,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/chain-env.sh"   # chain table + resolve_chain
 
 GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[extension-post-setup]${NC} $*"; }
@@ -46,8 +47,9 @@ log() { echo -e "${GREEN}[extension-post-setup]${NC} $*"; }
 if [[ -f "$PROJECT_DIR/.env" ]]; then
     set -a; source "$PROJECT_DIR/.env"; set +a
 fi
-if [[ -f "$PROJECT_DIR/config/extension.env" ]]; then
-    source "$PROJECT_DIR/config/extension.env"
+EXT_ENV="$(extension_env_path)"
+if [[ -f "$EXT_ENV" ]]; then
+    source "$EXT_ENV"
 fi
 
 log "EXTENSION_ID:       ${EXTENSION_ID:-<not set>}"

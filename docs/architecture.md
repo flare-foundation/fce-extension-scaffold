@@ -73,6 +73,8 @@ that need state must encrypt and export it.
 
 | Script | Does |
 |---|---|
+| `use-chain.sh` | create + activate everything one chain needs (env, proxy toml, compose override) |
+| `chain-env.sh` | the chain table every script sources — chain ids, RPCs, `config/<chain>/` |
 | `pre-build.sh` | generate bindings, compile, deploy `InstructionSender`, register extension |
 | `start-services.sh` | build + start node/proxy/redis, sync the tunnel on testnets |
 | `post-build.sh` | allow TEE version, set governance, register the TEE machine |

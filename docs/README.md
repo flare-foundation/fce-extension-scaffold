@@ -27,7 +27,9 @@ obvious and every extension hits them:
 
 ## Scaffold — keep byte-identical across extensions
 
-Provided by the scaffold; do not fork these:
+This repo is the upstream for these — siblings copy them verbatim. The copies
+here carry extra multi-language notes siblings do not need; keep those, and keep
+everything else in sync:
 
 [extension-guide.md](extension-guide.md) ·
 [instruction-sender.md](instruction-sender.md) ·

@@ -305,7 +305,7 @@ FROM local/tee-node-base:${TEE_NODE_REF} AS node
 
 The shared base image (`docker/node-base.Dockerfile`) supplies the tee-node `server` binary and the Confidential Space root cert, so you skip the golang stage and the tee-node fetch entirely. `start-services.sh` builds it automatically for any Dockerfile that references `tee-node-base`.
 
-Then satisfy contract §6 exactly — same `EXPOSE`, same `MODE`/port env, `USER 0:0`, and an **identical** `tee.launch_policy.allow_env_override` label. A label mismatch means Confidential Space silently rejects operator env overrides at attestation time, and you find out at deployment rather than at build.
+Then satisfy contract §6 exactly — no `EXPOSE`, same `MODE`/port env, `USER 0:0`, and an **identical** `tee.launch_policy.allow_env_override` label. A label mismatch means Confidential Space silently rejects operator env overrides at attestation time, and you find out at deployment rather than at build.
 
 Add `<language>/Dockerfile.dockerignore` excluding the other language directories and local build artifacts; anything reachable in the build context can perturb layer hashes.
 

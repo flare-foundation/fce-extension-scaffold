@@ -8,10 +8,10 @@ first, see [deployment-steps.md](deployment-steps.md).
 
 | Need | Note |
 |---|---|
-| `.env.coston2` | filled in; `use-chain.sh coston2` activates it |
+| `.env.coston2` | `use-chain.sh coston2` creates and activates it |
 | A funded Coston2 key | sends the test instructions; get C2FLR from the [faucet](https://faucet.flare.network/coston2) |
 | `config/coston2/deployed-addresses.json` | the `FlareTeeManager` diamond and friends |
-| `config/proxy/extension_proxy.coston2.docker.toml` | gitignored — copy the `.example` and fill in `[db]` |
+| `config/proxy/extension_proxy.coston2.docker.toml` | gitignored; `use-chain.sh coston2` generates it — verify the `[db]` credentials it carried over |
 | A reachable `EXT_PROXY_URL` | the VM's URL, or a tunnel if the proxy runs locally |
 
 ## Confirm the deployment is live
@@ -22,17 +22,22 @@ curl -s "$EXT_PROXY_URL/info" | jq '{extensionId, codeHash, platform}'
 
 | Field | Expect |
 |---|---|
-| `extensionId` | matches `EXTENSION_ID` in `config/extension.env` |
+| `extensionId` | matches `EXTENSION_ID` in `config/coston2/extension.env` |
 | `codeHash` | the hash registered on-chain — `0x194844cf…` means simulated, not real hardware |
 | `platform` | `GCP_AMD_SEV` on real hardware, `TEST_PLATFORM` when simulated |
 
 Then check the on-chain side:
 
 ```bash
-cd tools
-go run ./cmd/query-tee -ext <extensionId> -rpc "$CHAIN_URL"
-go run ./cmd/verify-deploy -a ../config/coston2/deployed-addresses.json -c "$CHAIN_URL"
+cd tools && source "../config/coston2/extension.env"
+A=../config/coston2/deployed-addresses.json
+REG=$(jq -r '.[]|select(.name=="FlareTeeManager").address' $A)
+go run ./cmd/query-tee -ext "$((EXTENSION_ID))" -reg "$REG" -rpc "$CHAIN_URL"
+go run ./cmd/verify-deploy -a $A -c "$CHAIN_URL"
 ```
+
+`-ext` takes the **decimal** extension id and `-reg` defaults to a stale address —
+pass both as above or the query silently returns nothing.
 
 `query-tee` lists the TEE machines registered for the extension. **More than one
 active machine is a problem** — instructions are load-balanced across them, so a
@@ -60,15 +65,17 @@ Counters are in memory, so the numbers restart at 1 after any TEE relaunch.
 
 ## Testing a local proxy against Coston2
 
-The proxy must be publicly reachable for FTDC data providers to answer it. Start
-the tunnel and let the scripts wire the URL in:
+The proxy must be publicly reachable for FTDC data providers to answer it, which
+is what simulated mode sets up:
 
 ```bash
-./scripts/full-setup.sh --chain coston2 --tunnel --test
+./scripts/use-chain.sh coston2 --simulated
+./scripts/full-setup.sh --chain coston2 --test
 ```
 
-That writes the tunnel URL into `.env` as `EXT_PROXY_URL`, so `post-build.sh` and
-`test.sh` pick it up. Details in [cloudflared.md](cloudflared.md).
+`start-services.sh` starts the tunnel and writes its URL as `EXT_PROXY_URL` into
+both `.env` and `.env.local.coston2`, so `post-build.sh` and `test.sh` pick it up.
+Details in [cloudflared.md](cloudflared.md).
 
 ## If something's blocked
 

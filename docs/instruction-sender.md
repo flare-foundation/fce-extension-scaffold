@@ -34,10 +34,14 @@ Any InstructionSender contract must:
 
 2. **Call `sendInstructions` on `TeeExtensionRegistry`** — this is the only way to submit instructions. The call must include:
    - `teeIds` — at least one TEE machine address (use `teeMachineRegistry.getRandomTeeIds()` to pick one)
-   - `opType` — a `bytes32` identifying the action (must match your Go handler)
+
+   The rest go in a `TeeInstructionParams` struct:
+
+   - `opType` — a `bytes32` identifying the action (must match your handler)
    - `opCommand` — a `bytes32` identifying the specific command within the operation type (e.g., `bytes32("SAY_HELLO")` or `bytes32("SAY_GOODBYE")`)
-   - `message` — the payload (typically JSON-encoded, non-empty)
+   - `message` — the payload (JSON or ABI-encoded, non-empty)
    - `cosigners` / `cosignersThreshold` — for multi-sig scenarios (usually empty/0)
+   - `claimBackAddress` — the address the protocol credits back against this instruction; the scaffold passes `msg.sender`
 
 3. **Forward `msg.value`** — the registry charges a fee per instruction. Your send functions should be `payable` and forward the full value.
 
@@ -61,35 +65,37 @@ bytes32 constant OP_COMMAND_SAY_GOODBYE = bytes32("SAY_GOODBYE");
 function sendSayHello(bytes calldata _message) external payable {
     address[] memory teeIds = TEE_MACHINE_REGISTRY.getRandomTeeIds(_getExtensionId(), 1);
     address[] memory cosigners = new address[](0);
-    uint64 cosignersThreshold = 0;
 
-    TEE_EXTENSION_REGISTRY.sendInstructions{value: msg.value}(
-        teeIds,
-        OP_TYPE_GREETING,
-        OP_COMMAND_SAY_HELLO,
-        _message,
-        cosigners,
-        cosignersThreshold
-    );
+    ITeeExtensionRegistry.TeeInstructionParams memory params = ITeeExtensionRegistry.TeeInstructionParams({
+        opType: OP_TYPE_GREETING,
+        opCommand: OP_COMMAND_SAY_HELLO,
+        message: _message,
+        cosigners: cosigners,
+        cosignersThreshold: 0,
+        claimBackAddress: msg.sender
+    });
+
+    TEE_EXTENSION_REGISTRY.sendInstructions{value: msg.value}(teeIds, params);
 }
 
 function sendSayGoodbye(string calldata _name, string calldata _reason) external payable {
     address[] memory teeIds = TEE_MACHINE_REGISTRY.getRandomTeeIds(_getExtensionId(), 1);
     address[] memory cosigners = new address[](0);
-    uint64 cosignersThreshold = 0;
 
-    TEE_EXTENSION_REGISTRY.sendInstructions{value: msg.value}(
-        teeIds,
-        OP_TYPE_GREETING,
-        OP_COMMAND_SAY_GOODBYE,
-        abi.encode(SayGoodbyeMessage(_name, _reason)),
-        cosigners,
-        cosignersThreshold
-    );
+    ITeeExtensionRegistry.TeeInstructionParams memory params = ITeeExtensionRegistry.TeeInstructionParams({
+        opType: OP_TYPE_GREETING,
+        opCommand: OP_COMMAND_SAY_GOODBYE,
+        message: abi.encode(SayGoodbyeMessage({name: _name, reason: _reason})),
+        cosigners: cosigners,
+        cosignersThreshold: 0,
+        claimBackAddress: msg.sender
+    });
+
+    TEE_EXTENSION_REGISTRY.sendInstructions{value: msg.value}(teeIds, params);
 }
 ```
 
-Each `OP_TYPE` string must match what your Go extension expects. On the Go side, use `teeutils.ToHash("GREETING")` to produce the matching `bytes32`. The `opCommand` field lets you route multiple actions under the same operation type — your Go handler can switch on both values to dispatch to the right logic.
+Each `OP_TYPE` string must match what your extension expects. In Go, `teeutils.ToHash("GREETING")` produces the matching `bytes32`; Python and TypeScript pad the string in `base/encoding`. The `opCommand` field lets you route multiple actions under the same operation type — your handler can switch on both values to dispatch to the right logic.
 
 After modifying the contract, run `./scripts/generate-bindings.sh` to regenerate the Go bindings.
 
@@ -119,9 +125,16 @@ contract MinimalInstructionSender {
 
     function send(bytes32 opType, bytes32 opCommand, bytes calldata message) external payable {
         address[] memory tees = machines.getRandomTeeIds(extensionId, 1);
-        address[] memory cosigners = new address[](0);
         registry.sendInstructions{value: msg.value}(
-            tees, opType, opCommand, message, cosigners, 0
+            tees,
+            ITeeExtensionRegistry.TeeInstructionParams({
+                opType: opType,
+                opCommand: opCommand,
+                message: message,
+                cosigners: new address[](0),
+                cosignersThreshold: 0,
+                claimBackAddress: msg.sender
+            })
         );
     }
 }

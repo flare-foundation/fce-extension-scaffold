@@ -17,6 +17,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/chain-env.sh"   # chain table + resolve_chain
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; NC='\033[0m'
 log()  { echo -e "${GREEN}[post-build]${NC} $*"; }
@@ -46,6 +47,8 @@ ADDRESSES_FILE="${ADDRESSES_FILE:-}"
 if [[ -n "$ADDRESSES_FILE" && "$ADDRESSES_FILE" != /* ]]; then
     ADDRESSES_FILE="$PROJECT_DIR/$ADDRESSES_FILE"
 fi
+# Chain arg overrides whatever .env says (source .env ran above).
+resolve_chain_default "${1:-}"
 TEE_VERSION="${TEE_VERSION:-v0.1.0}"
 LOCAL_MODE="${LOCAL_MODE:-true}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-120}"
@@ -56,11 +59,11 @@ if [[ -z "$ADDRESSES_FILE" ]]; then
     if [[ -z "$CHAIN" ]]; then
         [[ "$LOCAL_MODE" == "true" ]] && CHAIN="local" || CHAIN="coston2"
     fi
-    case "$CHAIN" in
-        coston)  candidate="$PROJECT_DIR/config/coston/deployed-addresses.json" ;;
-        coston2) candidate="$PROJECT_DIR/config/coston2/deployed-addresses.json" ;;
-        *)       candidate="" ;;
-    esac
+    if [[ "$CHAIN" != "local" ]]; then
+        candidate="$PROJECT_DIR/config/$CHAIN/deployed-addresses.json"
+    else
+        candidate=""
+    fi
     if [[ -n "$candidate" && -f "$candidate" ]]; then
         ADDRESSES_FILE="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
     fi
@@ -154,7 +157,7 @@ go run ./cmd/register-tee \
     -p "$EXT_PROXY_URL" \
     -h "${EXT_PROXY_HOST_URL:-$EXT_PROXY_URL}" \
     -ep "$NORMAL_PROXY_URL" \
-    -state "$PROJECT_DIR/config/register-tee.state" \
+    -state "$CHAIN_CONFIG_DIR/register-tee.state" \
     -command "${REGISTER_TEE_COMMAND:-rRap}" \
     || die "Register TEE failed"
 

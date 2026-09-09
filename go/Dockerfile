@@ -77,22 +77,15 @@ WORKDIR /app
 COPY --chmod=644 --chown=65532:65532 --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --chmod=755 --chown=65532:65532 --from=builder /app/extension-tee /app/extension-tee
 
-# MODE=1 is SIMULATED attestation (local dev). MODE=0 is production attestation.
-# Set to 1 here so a bare `docker run` works against the local devnet; compose
-# overrides it via MODE=${MODE:-1}.
-#
-# For a real Confidential Space deploy this MUST be 0 — FTDC rejects simulated
-# attestation. See docs/deployment-steps.md §5. Keep this value identical across
-# go/, python/ and typescript/ Dockerfiles.
-ENV MODE=1 CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
+# Production mode by default; docker-compose.yaml overrides to MODE=1 for local dev.
+# FTDC rejects simulated attestation, so a real deploy MUST stay 0.
+ENV MODE=0 CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
 
 # match tee-node: run as root (USER 0:0) — the TEE workload itself is the isolation boundary
 USER 0:0
 
 # confidential space launch policy label: allow the operator to override these env vars at workload launch
 # without this, the confidential space VM rejects overrides at attestation time and the values baked here are final
-LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE,CONFIG_PORT,SIGN_PORT,EXTENSION_PORT"
-
-EXPOSE 5501 7701 7702
+LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE"
 
 CMD ["/app/extension-tee"]

@@ -76,19 +76,16 @@ RUN if [ "${SOURCE_DATE_EPOCH:-0}" -gt 0 ] 2>/dev/null; then find /app -exec tou
 
 # Ports and mode match go/Dockerfile so compose works uniformly across languages.
 #
-# MODE=1 is SIMULATED attestation (local dev); MODE=0 is production attestation.
-# For a real Confidential Space deploy this MUST be 0 — FTDC rejects simulated
-# attestation. See docs/deployment-steps.md §5.
-ENV MODE=1 CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
+# Production mode by default; docker-compose.yaml overrides to MODE=1 for local dev.
+# FTDC rejects simulated attestation, so a real deploy MUST stay 0.
+ENV MODE=0 CONFIG_PORT=5501 SIGN_PORT=7701 EXTENSION_PORT=7702
 
 # Match tee-node: the TEE workload itself is the isolation boundary.
 USER 0:0
 
 # Must match go/Dockerfile's list exactly — a mismatch means Confidential Space
 # silently rejects operator env overrides at attestation time.
-LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE,CONFIG_PORT,SIGN_PORT,EXTENSION_PORT"
-
-EXPOSE 5501 7701 7702
+LABEL "tee.launch_policy.allow_env_override"="LOG_LEVEL,PROXY_URL,INITIAL_OWNER,EXTENSION_ID,CHAIN_URL,MODE"
 
 # Two-process layout: tee-node ./server handles config/sign and forwards actions
 # to the extension on EXTENSION_PORT. If either dies the container exits so the

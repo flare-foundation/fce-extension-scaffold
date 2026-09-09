@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # check-docs.sh — validate the shared docs standard (see docs/README.md).
 #
-# Checks presence, that the platform-wide traps are actually covered, and that
-# nothing has grown too long to be read by a tester. Content checks match on
-# keywords rather than headings so rewording does not break them.
+# Checks presence, that the platform-wide traps are actually covered, that
+# nothing has grown too long to be read by a tester, that internal links resolve
+# and fences balance, and that the mechanically checkable content claims (hex
+# widths, json tags, command paths) are true. Content checks match on keywords
+# rather than headings so rewording does not break them.
 #
-# Keep this file identical across extensions; the only per-repo difference is
-# ONE_SHOT_SETTER below.
+# Keep this file identical across extensions; the per-repo differences are
+# ONE_SHOT_SETTER and the SCAFFOLD list below.
 #
 # Exit 1 on a missing/incomplete required doc; long docs only warn.
 set -uo pipefail
@@ -58,6 +60,66 @@ if [[ -f "$D" ]]; then
     check "digest-pinned deploy"         "digest"
     check "attestation mode"             "SIMULATED_TEE"
 fi
+
+# --- content credibility: claims that can be checked mechanically ------------
+# Structure passing means nothing if the claims are false. These catch the
+# classes that are cheap to verify; signatures and semantics still need a human.
+echo
+SRC="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# bytes32 literals are 66 chars incl. 0x; addresses are 42. Only flag literals
+# NEAR those widths — hex-encoded payloads are legitimately any length.
+while read -r h; do
+    n=${#h}
+    (( n == 66 || n == 42 )) && continue
+    (( (n >= 60 && n <= 70) || (n >= 38 && n <= 44) )) \
+        && err "hex literal ${h:0:14}… is $n chars (bytes32 is 66, address 42)"
+done < <(grep -ohE '0x[0-9a-fA-F]+' "$DOCS"/*.md | sort -u)
+
+# Every json tag shown in a doc code block must exist in the source. Scaffold
+# docs describe the upstream Hello World example, so they only have to match in
+# the scaffold repo itself — identified by its conformance fixtures.
+TAG_DOCS=()
+for f in "$DOCS"/*.md; do
+    if [[ ! -d "$SRC/testdata/conformance" ]]; then
+        case " $SCAFFOLD " in *" $(basename "$f") "*) continue ;; esac
+    fi
+    TAG_DOCS+=("$f")
+done
+while read -r t; do
+    grep -rqF "$t" --include='*.go' --include='*.py' --include='*.ts' "$SRC" \
+        || err "docs show $t — no such field in the source"
+done < <(grep -ohE 'json:"[a-zA-Z0-9_]+"' "${TAG_DOCS[@]}" | sort -u)
+
+# Scripts and tools named in docs must exist here, not just in a sibling.
+while read -r c; do
+    [[ -e "$SRC/$c" ]] && continue
+    # A gitignored path is absent by design, not stale.
+    git -C "$SRC" check-ignore -q "$c" 2>/dev/null && continue
+    err "docs reference $c — not in this repo"
+done < <(grep -ohE '((testing/)?scripts/[a-z0-9-]+\.sh|(go/)?tools/cmd/[a-z0-9-]+\*?)' "$DOCS"/*.md \
+         | grep -v '[*-]$' | sed 's|^\./||' | sort -u)
+
+(( fail )) || ok "content: hex widths, json tags and command paths check out"
+
+# --- navigation: links and fences ---------------------------------------------
+before=$fail
+
+# An unclosed fence renders every following line as code.
+for f in "$DOCS"/*.md; do
+    n=$(grep -c '^```' "$f")
+    (( n % 2 == 0 )) || err "$(basename "$f") has $n code fences — one is unclosed"
+done
+
+# Internal .md links must resolve. External URLs and bare anchors are out of
+# scope; the .md filter also drops array-index text like instructions[0](…).
+while read -r t; do
+    t="${t%%#*}"
+    [[ "$t" == *.md ]] || continue
+    [[ -e "$DOCS/$t" || -e "$SRC/$t" ]] || err "broken link: $t"
+done < <(grep -ohE '\]\([^)]+\)' "$DOCS"/*.md | sed 's/^](//; s/)$//' | sort -u)
+
+(( fail == before )) && ok "links resolve and code fences balance"
 
 echo
 if [[ -f "$DOCS/README.md" ]]; then ok "docs/README.md index present"; else err "docs/README.md index missing"; fi

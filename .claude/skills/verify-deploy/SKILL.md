@@ -5,6 +5,7 @@ Runs deployment verification checks and helps diagnose deployment failures.
 ## When to Use
 
 The user wants to check their deployment setup, diagnose a failed deployment, or verify everything is correctly configured. They may say things like:
+
 - "verify my deployment"
 - "check my setup"
 - "why is deploy failing"
@@ -32,6 +33,7 @@ cd tools && go run ./cmd/verify-deploy \
 ```
 
 Use the values from `.env` for ADDRESSES_FILE and CHAIN_URL. If `.env` doesn't set them, use the defaults:
+
 - ADDRESSES_FILE: auto-detected (same logic as pre-build.sh)
 - CHAIN_URL: http://127.0.0.1:8545
 
@@ -41,6 +43,7 @@ Use the values from `.env` for ADDRESSES_FILE and CHAIN_URL. If `.env` doesn't s
 - `--checks <IDs>` — further filter to specific check IDs within the selected step (comma-separated, e.g. `D5,R2`). All other checks are hidden and don't count toward failures.
 
 Examples:
+
 ```bash
 # Only the deploy step
 --step deploy
@@ -65,9 +68,10 @@ For each FAIL or WARN, explain what it means and how to fix it:
 **D1/D2 — Registry address has no code:**
 The addresses in deployed-addresses.json don't point to contracts on this chain.
 Likely causes:
+
 - Wrong CHAIN_URL (pointing to a different network than the addresses file)
 - Wrong ADDRESSES_FILE (using coston2 addresses on local devnet or vice versa)
-Fix: Check that CHAIN_URL and ADDRESSES_FILE in .env match the same network.
+  Fix: Check that CHAIN_URL and ADDRESSES_FILE in .env match the same network.
 
 **D3 — Zero address in config:**
 A required contract address is 0x000...000 in the addresses file.
@@ -197,6 +201,7 @@ If the user reports a failed deployment, or if verify-deploy shows FAILs:
 ### Step 5: Detect compound misconfigurations
 
 Check for these cross-cutting problems:
+
 - **Coston2 addresses + localhost CHAIN_URL** = network mismatch (everything will fail silently)
 - **LOCAL_MODE=false + no DEPLOYMENT_PRIVATE_KEY** = will use Hardhat key which has no Coston2 funds
 - **extension.env exists + INSTRUCTION_SENDER has no code** = stale deployment, needs re-run
@@ -206,8 +211,6 @@ Check for these cross-cutting problems:
 
 Full edge case documentation: `EXTENSION-DEPLOYMENT-EDGE-CASES.md`
 Design specs:
-- `docs/superpowers/specs/2026-04-09-deployment-hardening-design.md` (Step 1)
-- `docs/superpowers/specs/2026-04-09-registration-hardening-design.md` (Step 2)
 
 ## Important Notes
 

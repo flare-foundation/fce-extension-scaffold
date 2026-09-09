@@ -87,12 +87,12 @@ The repo splits into a **language-neutral spine** (contracts, deployment tooling
 
 The scaffold ships with a working Hello World. To build your extension you modify four things: the operation constants, the handlers, the Solidity contract, and the test assertions.
 
-| # | File | What you do |
-|---|------|-------------|
-| 1 | `<lang>` config — `go/internal/config/config.go`, `python/app/config.py`, or `typescript/src/app/config.ts` | Define your OPType and OPCommand constants |
-| 2 | `<lang>` handlers — `go/internal/extension/extension.go`, `python/app/handlers.py`, or `typescript/src/app/handlers.ts` | Implement your action handlers and state |
-| 3 | `contracts/InstructionSender.sol` | Add matching `bytes32` constants and send functions |
-| 4 | `tools/cmd/run-test/main.go` | Write test payloads and response assertions |
+| #   | File                                                                                                                    | What you do                                         |
+| --- | ----------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| 1   | `<lang>` config — `go/internal/config/config.go`, `python/app/config.py`, or `typescript/src/app/config.ts`             | Define your OPType and OPCommand constants          |
+| 2   | `<lang>` handlers — `go/internal/extension/extension.go`, `python/app/handlers.py`, or `typescript/src/app/handlers.ts` | Implement your action handlers and state            |
+| 3   | `contracts/InstructionSender.sol`                                                                                       | Add matching `bytes32` constants and send functions |
+| 4   | `tools/cmd/run-test/main.go`                                                                                            | Write test payloads and response assertions         |
 
 Go additionally has `go/pkg/types/types.go` for request/response structs; Python and TypeScript declare those shapes inline in the handlers.
 
@@ -125,7 +125,6 @@ This repository works out of the box as a Hello World extension. When you're rea
 > ### **→ [Follow the Making It Your Own guide](docs/manual-setup.md)** for step-by-step renaming instructions.
 >
 > Using [Claude Code](https://claude.ai/code)? Run `/rename-scaffold` to do it automatically.
-
 
 ## Run It
 
@@ -162,6 +161,7 @@ byte-identical on the wire, and it is the acceptance test for any new language. 
 - [Extension Container Contract](docs/extension-contract.md) — the normative wire format and container spec every implementation must satisfy
 - [Testing Guide](docs/testing.md) — the test layers, conformance fixtures, and what to run when
 - [Reproducibility](REPRODUCIBILITY.md) — what each language's build actually guarantees
+- [docs/](docs/README.md) — full index
 
 **Per-language**
 

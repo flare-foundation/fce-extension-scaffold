@@ -55,28 +55,30 @@ The derived address becomes your `INITIAL_OWNER`. Fund it from the target chain'
 
 ## 3. Create `.env.<chain>`
 
-Copy `.env.example` to `.env.coston` or `.env.coston2`. Fill in:
+`use-chain.sh` creates everything the chain needs — `.env.<chain>`, the proxy
+toml and the compose override — cloning the active `.env` and rewriting only the
+chain-specific values. It never overwrites an existing file.
 
 ```bash
-CHAIN=coston2                                                         # or coston
-CHAIN_URL=https://coston2-api.flare.network/ext/C/rpc                 # chain RPC
-ADDRESSES_FILE=./config/coston2/deployed-addresses.json
-NORMAL_PROXY_URL=https://tee-proxy-coston2-1.flare.rocks              # FTDC proxy
-EXT_PROXY_URL=                                                        # leave empty — set in Step 6
+bash ./scripts/use-chain.sh <chain>     # local | coston | coston2 | songbird | flare
+```
 
-LOCAL_MODE=false
-SIMULATED_TEE=false
+Coston and Coston2 ship their `config/<chain>/deployed-addresses.json`. For
+songbird or flare, copy that dump in first — `use-chain.sh` cannot invent it.
+
+It writes `CHAIN`, `CHAIN_ID`, `CHAIN_URL`, `ADDRESSES_FILE`, `NORMAL_PROXY_URL`,
+`LOCAL_MODE=false` and `SIMULATED_TEE=false` itself. Two values are yours, in
+`.env.<chain>`:
+
+```bash
 DEPLOYMENT_PRIVATE_KEY=<private key, no 0x prefix>
 INITIAL_OWNER=0x<derived address from Step 2>
 ```
 
-Activate it:
+`EXT_PROXY_URL` is left empty deliberately — you get it in Step 6.
 
-```bash
-bash ./scripts/use-chain.sh <chain>
-```
-
-Copies `.env.<chain>` → `.env`, which all scripts auto-load.
+Re-run `use-chain.sh <chain>` after editing to copy `.env.<chain>` → `.env`,
+which every script auto-loads. Edit `.env.<chain>`, never `.env`.
 
 ## 4. Register the extension on-chain
 
@@ -84,12 +86,12 @@ Copies `.env.<chain>` → `.env`, which all scripts auto-load.
 bash ./scripts/pre-build.sh
 ```
 
-Compiles Solidity, deploys `InstructionSender`, registers the extension on-chain. Writes `EXTENSION_ID` and `INSTRUCTION_SENDER` to `config/extension.env`.
+Compiles Solidity, deploys `InstructionSender`, registers the extension on-chain. Writes `EXTENSION_ID` and `INSTRUCTION_SENDER` to `config/<chain>/extension.env`.
 
 Read the new values — `EXTENSION_ID` is part of the hand-off in Step 6:
 
 ```bash
-cat config/extension.env
+source .env && cat "config/$CHAIN/extension.env"
 ```
 
 ## 5. Build the Docker image
@@ -102,17 +104,14 @@ The image built is selected by `LANGUAGE` in `.env` — `go/Dockerfile`, `python
 
 | Value | Meaning | Used for |
 |---|---|---|
-| `1` | Simulated attestation (test code hash) | local devnet — **the scaffold's default** |
+| `1` | Simulated attestation (test code hash) | local devnet — supplied by compose |
 | `0` | Production attestation | a real Confidential Space VM |
 
-**Every language's Dockerfile deliberately ships `MODE=1`**, so a bare `docker run` and the compose stack both work against the local devnet without extra configuration. `docker-compose.yaml` reinforces this with `MODE=${MODE:-1}`.
+**Every language's Dockerfile ships `MODE=0`**, so the image is production-safe as built and a release needs no edit. **FTDC rejects simulated attestation**, so that is the only value a real deploy may run with.
 
-**FTDC rejects simulated attestation**, so a production deploy must run with `MODE=0`. You have two options, and the second is preferred:
+Local dev gets `MODE=1` from `docker-compose.yaml` (`MODE=${MODE:-1}`); `start-services.sh` derives it from `SIMULATED_TEE` so the tooling and the container cannot disagree. A bare `docker run` against the devnet needs `-e MODE=1` — the `tee.launch_policy.allow_env_override` label lists `MODE`, so an override is accepted either way.
 
-1. Edit `ENV MODE=1` → `ENV MODE=0` in your `<LANGUAGE>/Dockerfile` before building the release image.
-2. **Leave the image as-is and override at workload launch.** The `tee.launch_policy.allow_env_override` label lists `MODE`, so the Confidential Space VM accepts an override — and without that label it would reject one. This keeps a single image usable for both local dev and production, and keeps the code hash independent of which environment it is destined for.
-
-Whichever you choose, verify what actually ended up in the image before registering its hash on-chain — see the check at the end of this section.
+Verify what actually ended up in the image before registering its hash on-chain — see the check at the end of this section.
 
 Then build:
 
@@ -143,7 +142,7 @@ Check which mode is baked into the image:
 docker inspect <your-extension>:v0.1.0 --format '{{range .Config.Env}}{{println .}}{{end}}' | Select-String MODE
 ```
 
-If you took option 1 above, expect `MODE=0`. If you took option 2, expect the scaffold default `MODE=1` and supply `MODE=0` at workload launch instead — confirm the launch policy label permits it:
+Expect `MODE=0`. If anything else comes back, the image was built from an edited Dockerfile — rebuild before registering its hash. The launch policy must still list `MODE` for local overrides to work:
 
 ```powershell
 docker inspect <your-extension>:v0.1.0 --format '{{index .Config.Labels "tee.launch_policy.allow_env_override"}}'
@@ -181,7 +180,7 @@ Required values:
 | -------------- | ----------------------------------------------------------------- |
 | `platform`     | starts with `0x4743505f414d445f534556…` (GCP_AMD_SEV)             |
 | `codeHash`     | real measured hash (**not** `0x194844cf…` — that's simulated)     |
-| `extensionId`  | matches your `config/extension.env` `EXTENSION_ID`                |
+| `extensionId`  | matches your `config/<chain>/extension.env` `EXTENSION_ID`           |
 | `initialOwner` | matches your `INITIAL_OWNER`                                      |
 
 If `extensionId` is wrong, ask the VM operator to restart the container with the correct `EXTENSION_ID` env override (no image rebuild needed — it's a launch-policy override).
@@ -226,9 +225,19 @@ to a dead node roughly half the time and silently never complete (`/action/resul
 404s, callers report a poll timeout).
 
 ```bash
-cd tools && go run ./cmd/query-tee -ext <extensionId> -rpc "$CHAIN_URL"   # via getActiveTeeMachines
-cast send <FlareTeeManager> 'pause(address)' <staleTeeId> --rpc-url "$CHAIN_URL" --private-key "$KEY"
+cd tools && source ../.env && source "../config/$CHAIN/extension.env"
+DIAMOND=$(jq -r '.[]|select(.name=="FlareTeeManager").address' ../config/$CHAIN/deployed-addresses.json)
+go run ./cmd/query-tee -ext "$((EXTENSION_ID))" -reg "$DIAMOND" -rpc "$CHAIN_URL"   # getActiveTeeMachines
+cast send "$DIAMOND" 'pause(address)' <staleTeeId> --rpc-url "$CHAIN_URL" --chain "$CHAIN_ID" --private-key "$KEY"
 ```
+
+`./scripts/check-tee-machines.sh --chain <chain>` does the comparison for you and
+prints the `pause` command for anything stale.
+
+`-ext` is **decimal**, not the bytes32 hex — `$((EXTENSION_ID))` converts it. `-reg`
+defaults to a stale address; always pass the diamond. `--chain "$CHAIN_ID"` is not
+optional: Foundry auto-loads `.env`, and its `CHAIN=coston2` collides with cast's
+own `--chain` flag, aborting with `invalid value 'coston2' for '--chain <CHAIN>'`.
 
 The live `teeId` is `keccak256(pubkey.x ‖ pubkey.y)[12:]` from the proxy's `/info`.
 There is no `unpause` — only `toProduction` with a fresh availability proof — so
@@ -258,6 +267,12 @@ crane copy <src>@sha256:<digest> <dst>@sha256:<digest>
 ```
 
 ### `SIMULATED_TEE=false` on real hardware
+
+It also picks the workflow. `false` is *live*: `MODE=0`, a devops-hosted TEE, and
+`start-services.sh` refuses the local Docker stack — a plain container cannot
+attest, so it would register a code hash FTDC rejects. Run the TEE yourself with
+`./scripts/use-chain.sh <chain> --simulated`; point at someone else's with
+`EXT_PROXY_URL` and `post-build.sh` alone.
 
 And `CHAIN_ID` must be set — unset leaves `chainID=0` and every signature comes back
 empty (`signature must be 65 bytes, got 0`).

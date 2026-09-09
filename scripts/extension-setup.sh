@@ -8,7 +8,7 @@
 #   - Writing config files the extension reads at init (pairs, feeds, pools)
 #   - Minting test tokens, setting allowances, seeding initial state
 #
-# The following variables are available (sourced from .env + config/extension.env):
+# The following variables are available (sourced from .env + config/<chain>/extension.env):
 #
 #   INSTRUCTION_SENDER   — your deployed InstructionSender contract address
 #   EXTENSION_ID         — your extension's ID on the TeeExtensionRegistry
@@ -20,7 +20,7 @@
 #
 #   cd "$PROJECT_DIR/tools"
 #   HELPER_ADDR=$(go run ./cmd/deploy-helper -a "$ADDRESSES_FILE" -c "$CHAIN_URL")
-#   echo "HELPER_CONTRACT=$HELPER_ADDR" > "$PROJECT_DIR/config/helper.env"
+#   echo "HELPER_CONTRACT=$HELPER_ADDR" > "$CHAIN_CONFIG_DIR/helper.env"
 #
 # Why this matters:
 #   The extension container reads config at startup. Anything it needs must be
@@ -30,6 +30,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$SCRIPT_DIR/chain-env.sh"   # chain table + resolve_chain
 
 GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[extension-setup]${NC} $*"; }
@@ -38,8 +39,9 @@ log() { echo -e "${GREEN}[extension-setup]${NC} $*"; }
 if [[ -f "$PROJECT_DIR/.env" ]]; then
     set -a; source "$PROJECT_DIR/.env"; set +a
 fi
-if [[ -f "$PROJECT_DIR/config/extension.env" ]]; then
-    source "$PROJECT_DIR/config/extension.env"
+EXT_ENV="$(extension_env_path)"
+if [[ -f "$EXT_ENV" ]]; then
+    source "$EXT_ENV"
 fi
 
 log "EXTENSION_ID:       ${EXTENSION_ID:-<not set>}"
