@@ -326,7 +326,9 @@ if [[ "$USE_LOCAL" == "false" ]]; then
         die "config/proxy/$PROXY_CFG not found (it is gitignored — a fresh clone only has the .example).\n  cp config/proxy/$PROXY_CFG.example config/proxy/$PROXY_CFG   # then fill in the [db] credentials"
     fi
 
-    docker compose "${COMPOSE_FILES[@]}" up -d --build || die "docker compose up failed"
+    # --force-recreate is load-bearing: ext-proxy pins the node's teeId once at
+    # startup (result.SetIdentity is set-once) and rejects results from a new one.
+    docker compose "${COMPOSE_FILES[@]}" up -d --build --force-recreate || die "docker compose up failed"
 
     # Wait for proxy to be ready
     E2E="$SCRIPT_DIR/e2e.sh"
