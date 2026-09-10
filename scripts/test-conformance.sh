@@ -143,18 +143,19 @@ run_fixture() {
 
     # Body: `body` is a JSON value to serialize, `raw_body` is sent verbatim
     # (used for deliberately malformed input).
-    local body_args=()
+    # Seeded and always ends with the URL: bash 3.2 + set -u rejects an empty array.
+    local -a req_args=(-X "$method" -H 'Content-Type: application/json')
     if jq -e 'has("request") and (.request | has("raw_body"))' "$file" >/dev/null; then
-        body_args=(--data-binary "$(jq -r '.request.raw_body' "$file")")
+        req_args+=(--data-binary "$(jq -r '.request.raw_body' "$file")")
     elif jq -e '.request | has("body")' "$file" >/dev/null; then
-        body_args=(--data-binary "$(jq -c '.request.body' "$file")")
+        req_args+=(--data-binary "$(jq -c '.request.body' "$file")")
     fi
+    req_args+=("http://127.0.0.1:$port$path")
 
     local resp_file; resp_file="$(mktemp)"
     local code
     code="$(curl -s -o "$resp_file" -w '%{http_code}' \
-        -X "$method" -H 'Content-Type: application/json' \
-        "${body_args[@]}" "http://127.0.0.1:$port$path" 2>/dev/null)"
+        "${req_args[@]}" 2>/dev/null)"
 
     local expected_status; expected_status="$(jq -r '.expect.status' "$file")"
     local fail=""

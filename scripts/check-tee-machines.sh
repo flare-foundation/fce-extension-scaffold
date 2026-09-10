@@ -85,6 +85,7 @@ show_policy() {
     epoch=$(cast call "$fsm" "getCurrentRewardEpochId()(uint256)" \
               --rpc-url "$CHAIN_URL" "${CAST_CHAIN[@]}" 2>/dev/null | awk '{print $1}') || return 0
     [[ -n "$epoch" ]] || return 0
+    (( ${#URLS[@]} )) || return 0
     echo -e "\n${CYAN}=== signing policy ===${NC}"
     printf '  %-56s %s\n' "chain reward epoch" "$epoch"
     for url in "${URLS[@]}"; do

@@ -169,7 +169,7 @@ arg_ver() { grep -E "^ARG $2=" "$1" 2>/dev/null | head -1 | sed -E 's/.*=//' || 
 
 # Latest tag on the upstream repo $1; empty when offline or git is unavailable.
 latest_tag() {
-    timeout 10 git ls-remote --tags --refs "https://github.com/flare-foundation/$1.git" 2>/dev/null \
+    GIT_TERMINAL_PROMPT=0 GIT_HTTP_LOW_SPEED_LIMIT=1000 GIT_HTTP_LOW_SPEED_TIME=10 git ls-remote --tags --refs "https://github.com/flare-foundation/$1.git" 2>/dev/null \
         | sed 's|.*refs/tags/||' | sort -V | tail -1 || true
 }
 
