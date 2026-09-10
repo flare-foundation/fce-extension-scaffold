@@ -46,8 +46,23 @@ die()  { echo -e "${RED}[start-services] ERROR:${NC} $*" >&2; exit 1; }
 USE_LOCAL=false
 USE_TUNNEL=false
 CHAIN_FLAG=""
+usage() {
+    cat <<USAGE
+start-services.sh — Start the extension TEE node and proxy.
+
+Usage: ./scripts/start-services.sh [flags]
+
+Flags:
+  --chain <name>   local | coston | coston2 | songbird | flare (default: from .env)
+  --local          run TEE + proxy as background Go processes instead of Docker
+  --tunnel         start the shared Cloudflare tunnel even in live mode
+  -h, --help       this message
+USAGE
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help) usage; exit 0 ;;
         --local) USE_LOCAL=true; shift ;;
         --tunnel) USE_TUNNEL=true; shift ;;
         --chain) [[ $# -ge 2 ]] || die "--chain requires a value (${CHAINS// /|})"
@@ -63,6 +78,9 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     source "$PROJECT_DIR/.env"
     set +a
 fi
+
+# Images target linux/amd64 (GCP); an arm64 host would pull arm64 base images.
+export DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}"
 
 # --- Load extension config ---
 CONFIG_FILE="$(extension_env_path)"

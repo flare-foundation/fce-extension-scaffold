@@ -18,6 +18,9 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[build-node-base]${NC} $*"; }
 die() { echo -e "${RED}[build-node-base] ERROR:${NC} $*" >&2; exit 1; }
 
+# Images target linux/amd64 (GCP); an arm64 host would pull arm64 base images.
+export DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}"
+
 FORCE=false
 [[ "${1:-}" == "--force" ]] && FORCE=true
 
