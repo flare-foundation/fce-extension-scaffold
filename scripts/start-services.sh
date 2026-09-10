@@ -79,9 +79,6 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     set +a
 fi
 
-# Images target linux/amd64 (GCP); an arm64 host would pull arm64 base images.
-export DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}"
-
 # --- Load extension config ---
 CONFIG_FILE="$(extension_env_path)"
 if [[ -f "$CONFIG_FILE" ]]; then

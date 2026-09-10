@@ -18,9 +18,6 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; NC='\033[0m'
 log() { echo -e "${GREEN}[build-node-base]${NC} $*"; }
 die() { echo -e "${RED}[build-node-base] ERROR:${NC} $*" >&2; exit 1; }
 
-# Images target linux/amd64 (GCP); an arm64 host would pull arm64 base images.
-export DOCKER_DEFAULT_PLATFORM="${DOCKER_DEFAULT_PLATFORM:-linux/amd64}"
-
 FORCE=false
 [[ "${1:-}" == "--force" ]] && FORCE=true
 
@@ -42,7 +39,7 @@ log "  tee-node pin: $TEE_NODE_VERSION"
 log "  git ref:      $TEE_NODE_REF"
 log "  SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
 
-docker build \
+docker build --platform linux/amd64 \
     -f "$PROJECT_DIR/docker/node-base.Dockerfile" \
     --build-arg "TEE_NODE_REF=$TEE_NODE_REF" \
     --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
