@@ -33,8 +33,23 @@ die()  { echo -e "${RED}[stop-services] ERROR:${NC} $*" >&2; exit 1; }
 USE_LOCAL=false
 USE_TUNNEL=false
 CHAIN_FLAG=""
+usage() {
+    cat <<USAGE
+stop-services.sh — Stop the extension services.
+
+Usage: ./scripts/stop-services.sh [flags]
+
+Flags:
+  --chain <name>   local | coston | coston2 | songbird | flare (default: from .env)
+  --local          stop background Go processes instead of Docker
+  --tunnel         also stop the shared Cloudflare tunnel
+  -h, --help       this message
+USAGE
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help) usage; exit 0 ;;
         --local) USE_LOCAL=true; shift ;;
         --tunnel) USE_TUNNEL=true; shift ;;
         --chain) [[ $# -ge 2 ]] || die "--chain requires a value (${CHAINS// /|})"

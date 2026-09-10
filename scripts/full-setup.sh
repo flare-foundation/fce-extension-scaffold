@@ -34,8 +34,24 @@ USE_LOCAL=false
 USE_TUNNEL=false
 CHAIN=""
 CHAIN_FLAG=""
+usage() {
+    cat <<USAGE
+full-setup.sh — Run the whole lifecycle: pre-build, start, post-build, test.
+
+Usage: ./scripts/full-setup.sh [flags]
+
+Flags:
+  --chain <name>   local | coston | coston2 | songbird | flare (default: local)
+  --test           run the e2e test after setup
+  --local          run TEE + proxy as background Go processes instead of Docker
+  --tunnel         start the shared Cloudflare tunnel even in live mode
+  -h, --help       this message
+USAGE
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help) usage; exit 0 ;;
         --test) RUN_TESTS=true; shift ;;
         --local) USE_LOCAL=true; shift ;;
         --tunnel) USE_TUNNEL=true; shift ;;
