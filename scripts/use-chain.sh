@@ -284,13 +284,18 @@ fi
 
 # A file with no trailing newline would glue an appended key onto its last line.
 ensure_nl() { [[ -s "$1" && -n "$(tail -c1 "$1")" ]] && printf '\n' >> "$1"; return 0; }
+sed_i() {
+    local f="${!#}"
+    sed -i.bak "${@:1:$#-1}" "$f"
+    rm -f "$f.bak"
+}
 
 # Replace KEY $1 line with KEY=$2 in $ENV_FILE (append if absent).
 # set_kv KEY VALUE [file] — defaults to $ENV_FILE.
 set_kv() {
     local f="${3:-$ENV_FILE}"
     if grep -qE "^$1=" "$f"; then
-        sed -i "s|^$1=.*|$1=$2|" "$f"
+        sed_i "s|^$1=.*|$1=$2|" "$f"
     else
         ensure_nl "$f"
         printf '%s=%s\n' "$1" "$2" >> "$f"
@@ -394,7 +399,7 @@ else
 
     if [[ -n "$DB_DONOR" ]]; then
         f="$PROJECT_DIR/config/proxy/extension_proxy.$DB_DONOR.docker.toml"
-        sed -i \
+        sed_i \
             -e "s|^host[[:space:]]*=.*|host = \"$(toml_val "$f" host)\"|" \
             -e "s|^port[[:space:]]*=.*|port = $(toml_val "$f" port)|" \
             -e "s|^database[[:space:]]*=.*|database = \"$(toml_val "$f" database)\"|" \
