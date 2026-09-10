@@ -98,16 +98,17 @@ fi
 # container, so tearing it down rotates their URL too.
 CF_COMPOSE="$PROJECT_DIR/docker-compose.cloudflared.yaml"
 if [[ -f "$CF_COMPOSE" ]]; then
-    CF_PROJ=()
-    [[ "$USE_LOCAL" == "true" ]] && CF_PROJ=(-p tunnel-local)
+    # Never-empty: bash 3.2 + set -u treats "${empty[@]}" as unbound.
+    CF_COMPOSE_CMD=(docker compose -f "$CF_COMPOSE")
+    [[ "$USE_LOCAL" == "true" ]] && CF_COMPOSE_CMD=(docker compose -p tunnel-local -f "$CF_COMPOSE")
     if [[ "$USE_TUNNEL" == "true" || "${SIMULATED_TEE:-true}" == "true" ]]; then
-        if docker compose "${CF_PROJ[@]}" -f "$CF_COMPOSE" ps -q cloudflared 2>/dev/null | grep -q .; then
+        if "${CF_COMPOSE_CMD[@]}" ps -q cloudflared 2>/dev/null | grep -q .; then
             log "Stopping the shared Cloudflare tunnel (last)..."
-            docker compose "${CF_PROJ[@]}" -f "$CF_COMPOSE" down || log "WARNING: failed to stop cloudflared"
+            "${CF_COMPOSE_CMD[@]}" down || log "WARNING: failed to stop cloudflared"
         else
             log "No tunnel running — nothing to stop."
         fi
-    elif docker compose "${CF_PROJ[@]}" -f "$CF_COMPOSE" ps -q cloudflared 2>/dev/null | grep -q .; then
+    elif "${CF_COMPOSE_CMD[@]}" ps -q cloudflared 2>/dev/null | grep -q .; then
         log "Leaving the shared Cloudflare tunnel running (pass --tunnel to stop it)."
     fi
 fi
