@@ -86,10 +86,12 @@ for f in "$DOCS"/*.md; do
     fi
     TAG_DOCS+=("$f")
 done
+if (( ${#TAG_DOCS[@]} )); then
 while read -r t; do
     grep -rqF "$t" --include='*.go' --include='*.py' --include='*.ts' "$SRC" \
         || err "docs show $t — no such field in the source"
 done < <(grep -ohE 'json:"[a-zA-Z0-9_]+"' "${TAG_DOCS[@]}" | sort -u)
+fi
 
 # Scripts and tools named in docs must exist here, not just in a sibling.
 while read -r c; do

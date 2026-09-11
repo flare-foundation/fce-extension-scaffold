@@ -13,8 +13,13 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// MinDeployBalance is the minimum balance required for deployment (0.01 ETH).
+// MinDeployBalance is a floor only — prefer KeyCanAffordDeploy, which prices
+// the deploy at the live gas price instead of a fixed amount.
 var MinDeployBalance = big.NewInt(10_000_000_000_000_000)
+
+// DeployGasUnits is a deploy's worst case: ~1.7M for the scaffold's
+// InstructionSender, rounded up for constructor work and gas-price drift.
+const DeployGasUnits uint64 = 2_500_000
 
 // rpcTimeout is the timeout for all RPC calls.
 const rpcTimeout = 10 * time.Second
@@ -84,6 +89,56 @@ func KeyHasFunds(client *ethclient.Client, key *ecdsa.PrivateKey, minWei *big.In
 	}
 
 	return nil
+}
+
+// KeyCanAffordDeploy prices the deploy at the live gas price. A fixed floor is
+// not enough: at 650 gwei, 0.01 ETH passes and the deploy still dies with
+// "contract creation code storage out of gas", because eth_estimateGas caps the
+// gas it will try at balance/gasPrice.
+func KeyCanAffordDeploy(client *ethclient.Client, key *ecdsa.PrivateKey, gasUnits uint64) error {
+	if client == nil {
+		return fmt.Errorf("cannot check deployer balance: no chain client connected")
+	}
+	addr := crypto.PubkeyToAddress(key.PublicKey)
+
+	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
+	defer cancel()
+
+	balance, err := client.BalanceAt(ctx, addr, nil)
+	if err != nil {
+		return fmt.Errorf("cannot check deployer balance: %w", err)
+	}
+	gasPrice, err := client.SuggestGasPrice(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot read gas price: %w", err)
+	}
+	return canAfford(addr, balance, gasPrice, gasUnits)
+}
+
+// canAfford is the comparison on its own, so it is testable without a chain.
+func canAfford(addr common.Address, balance, gasPrice *big.Int, gasUnits uint64) error {
+	if gasPrice == nil || gasPrice.Sign() <= 0 {
+		return fmt.Errorf("cannot price the deploy: gas price is %v", gasPrice)
+	}
+	need := new(big.Int).Mul(gasPrice, new(big.Int).SetUint64(gasUnits))
+	if balance.Cmp(need) >= 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"deployer %s cannot afford the deploy: has %s, needs ~%s for %d gas at %s gwei. "+
+			"Fund this account before deploying",
+		addr.Hex(), inEther(balance), inEther(need), gasUnits, inGwei(gasPrice),
+	)
+}
+
+func inEther(wei *big.Int) string {
+	f := new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(1e18))
+	return f.Text('f', 4)
+}
+
+func inGwei(wei *big.Int) string {
+	f := new(big.Float).Quo(new(big.Float).SetInt(wei), big.NewFloat(1e9))
+	return f.Text('f', 0)
 }
 
 // IsUsingDevKey returns true if the DEPLOYMENT_PRIVATE_KEY environment variable is empty,

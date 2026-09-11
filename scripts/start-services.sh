@@ -46,8 +46,23 @@ die()  { echo -e "${RED}[start-services] ERROR:${NC} $*" >&2; exit 1; }
 USE_LOCAL=false
 USE_TUNNEL=false
 CHAIN_FLAG=""
+usage() {
+    cat <<USAGE
+start-services.sh — Start the extension TEE node and proxy.
+
+Usage: ./scripts/start-services.sh [flags]
+
+Flags:
+  --chain <name>   local | coston | coston2 | songbird | flare (default: from .env)
+  --local          run TEE + proxy as background Go processes instead of Docker
+  --tunnel         start the shared Cloudflare tunnel even in live mode
+  -h, --help       this message
+USAGE
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help) usage; exit 0 ;;
         --local) USE_LOCAL=true; shift ;;
         --tunnel) USE_TUNNEL=true; shift ;;
         --chain) [[ $# -ge 2 ]] || die "--chain requires a value (${CHAINS// /|})"
@@ -177,23 +192,23 @@ fi
 TUNNEL_ACTIVE=false
 sync_tunnel() {
     local cf_compose="$PROJECT_DIR/docker-compose.cloudflared.yaml"
-    local -a proj=()   # empty → project "tunnel", from the compose file's `name:`
+    local -a compose=(docker compose -f "$cf_compose")
     [[ -f "$cf_compose" ]] || die "$cf_compose not found — see docs/cloudflared.md"
 
     if [[ "$USE_LOCAL" == "true" ]]; then
         # Host Go proxy is on 6664: a different origin would recreate the shared
         # tunnel and rotate everyone's URL, so local mode gets its own project.
-        proj=(-p tunnel-local)
+        compose=(docker compose -p tunnel-local -f "$cf_compose")
         export TUNNEL_TARGET="http://host.docker.internal:6664"
     elif [[ -n "${TUNNEL_TARGET:-}" ]]; then
         log "NOTE: TUNNEL_TARGET is set — this recreates the shared 'tunnel' container."
     fi
 
-    if docker compose "${proj[@]}" -f "$cf_compose" ps -q cloudflared 2>/dev/null | grep -q .; then
+    if "${compose[@]}" ps -q cloudflared 2>/dev/null | grep -q .; then
         log "Cloudflare tunnel already running — reusing it."
     else
         log "Starting the Cloudflare tunnel (first, before the stack)..."
-        docker compose "${proj[@]}" -f "$cf_compose" up -d || die "Failed to start cloudflared"
+        "${compose[@]}" up -d || die "Failed to start cloudflared"
     fi
     TUNNEL_ACTIVE=true
 
@@ -205,21 +220,24 @@ sync_tunnel() {
 
     # A restarted container keeps its old logs, so scan only from this start.
     local cid started
-    local -a since=()
-    cid=$(docker compose "${proj[@]}" -f "$cf_compose" ps -q cloudflared 2>/dev/null | head -1 || true)
+    cid=$("${compose[@]}" ps -q cloudflared 2>/dev/null | head -1 || true)
     started=$(docker inspect -f '{{.State.StartedAt}}' "$cid" 2>/dev/null | cut -c1-19 || true)
-    [[ -n "$started" ]] && since=(--since "${started}Z")
 
     log "Reading the quick-tunnel URL..."
     local url="" i
     for ((i = 0; i < 30; i++)); do
         # `|| true` is load-bearing: grep exits 1 until the URL appears.
-        url=$(docker compose "${proj[@]}" -f "$cf_compose" logs "${since[@]}" cloudflared 2>/dev/null \
-              | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true)
+        if [[ -n "$started" ]]; then
+            url=$("${compose[@]}" logs --since "${started}Z" cloudflared 2>/dev/null \
+                  | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true)
+        else
+            url=$("${compose[@]}" logs cloudflared 2>/dev/null \
+                  | grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' | tail -1 || true)
+        fi
         [[ -n "$url" ]] && break
         sleep 1
     done
-    [[ -n "$url" ]] || die "cloudflared printed no *.trycloudflare.com URL within 30s.\n  Check: docker compose ${proj[*]} -f $cf_compose logs cloudflared"
+    [[ -n "$url" ]] || die "cloudflared printed no *.trycloudflare.com URL within 30s.\n  Check: ${compose[*]} logs cloudflared"
 
     export EXT_PROXY_URL="$url"
     # post-build.sh and test.sh re-source .env, so the file is how the URL reaches
@@ -233,7 +251,8 @@ write_proxy_url() {
     local f="$1" url="$2"
     [[ -f "$f" ]] || return 0
     if grep -q '^EXT_PROXY_URL=' "$f"; then
-        sed -i "s|^EXT_PROXY_URL=.*|EXT_PROXY_URL=$url|" "$f"
+        sed -i.bak "s|^EXT_PROXY_URL=.*|EXT_PROXY_URL=$url|" "$f"
+        rm -f "$f.bak"
     else
         printf 'EXT_PROXY_URL=%s\n' "$url" >> "$f"
     fi
@@ -334,7 +353,9 @@ if [[ "$USE_LOCAL" == "false" ]]; then
     E2E="$SCRIPT_DIR/e2e.sh"
     EXT_PROXY_URL="${EXT_PROXY_URL:-http://localhost:6674}"
     log "Waiting for extension proxy at $EXT_PROXY_URL/info ..."
-    "$E2E" wait-for-url "$EXT_PROXY_URL/info" 120
+    # Quick-tunnel propagation is variable: 4s and 66s both observed. A timeout now
+    # prints a DNS diagnosis, so waiting longer than 120s buys nothing.
+    "$E2E" wait-for-url "$EXT_PROXY_URL/info" "${PROXY_WAIT_TIMEOUT:-120}"
 
     # Validate EXTENSION_ID is recognized by proxy
     log "Validating EXTENSION_ID against proxy..."

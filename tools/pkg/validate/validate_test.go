@@ -132,3 +132,27 @@ func TestMinDeployBalance_Value(t *testing.T) {
 		t.Errorf("MinDeployBalance = %s, want %s", MinDeployBalance.String(), expected.String())
 	}
 }
+
+func TestCanAfford(t *testing.T) {
+	addr := common.HexToAddress("0xaAb2B5619F7c11C72947913B584b8BFec5654Df5")
+	gwei := func(n int64) *big.Int { return new(big.Int).Mul(big.NewInt(n), big.NewInt(1e9)) }
+
+	// The real case: 1.0085 C2FLR at 650 gwei buys 1.55M gas, short of 2.5M.
+	bal, _ := new(big.Int).SetString("1008510379902045942", 10)
+	if err := canAfford(addr, bal, gwei(650), DeployGasUnits); err == nil {
+		t.Error("1.0085 at 650 gwei should not afford 2.5M gas")
+	}
+	// Same balance is plenty once the price is normal.
+	if err := canAfford(addr, bal, gwei(25), DeployGasUnits); err != nil {
+		t.Errorf("1.0085 at 25 gwei should afford 2.5M gas: %v", err)
+	}
+	// Exactly enough is enough.
+	need := new(big.Int).Mul(gwei(650), new(big.Int).SetUint64(DeployGasUnits))
+	if err := canAfford(addr, need, gwei(650), DeployGasUnits); err != nil {
+		t.Errorf("exact balance should pass: %v", err)
+	}
+	// A zero gas price is a broken RPC answer, not free gas.
+	if err := canAfford(addr, big.NewInt(0), big.NewInt(0), DeployGasUnits); err == nil {
+		t.Error("zero gas price should be rejected")
+	}
+}

@@ -171,22 +171,39 @@ cmd_status() {
     fi
 }
 
+# curl, not nslookup: Windows nslookup exits 0 on NXDOMAIN, so its status proves nothing.
+diagnose_dns() {
+    local url="$1" out host
+    out=$(curl -sS --max-time 8 -o /dev/null "$url" 2>&1) || true
+    case "$out" in *"Could not resolve"*|*"Resolving timed out"*) ;; *) return 0 ;; esac
+
+    host="${url#*://}"; host="${host%%/*}"
+    if curl -sS --max-time 8 -H 'accept: application/dns-json' "https://1.1.1.1/dns-query?name=$host&type=A" 2>/dev/null | grep -q '"Answer"'; then
+        err "$host resolves on 1.1.1.1 but not on your DNS — a VPN or split-DNS resolver is blocking it"
+        err "  Windows (elevated): Add-DnsClientNrptRule -Namespace \".${host#*.}\" -NameServers \"1.1.1.1\"; Clear-DnsClientCache"
+        err "  or disconnect the VPN and re-run"
+    else
+        err "$host does not resolve anywhere — the tunnel probably never came up"
+    fi
+}
+
 cmd_wait_for_url() {
     local url="$1"
     local timeout="${2:-120}"
-    local waited=0
 
+    # Wall clock, not iteration count: a hanging DNS lookup makes one pass cost far more than 2s.
+    SECONDS=0
     log "Waiting for $url (timeout: ${timeout}s)..."
-    while [ $waited -lt "$timeout" ]; do
-        if curl -sf "$url" > /dev/null 2>&1; then
-            log "$url is ready (${waited}s)"
+    while [ "$SECONDS" -lt "$timeout" ]; do
+        if curl -sf --max-time 5 "$url" > /dev/null 2>&1; then
+            log "$url is ready (${SECONDS}s)"
             return 0
         fi
         sleep 2
-        waited=$((waited + 2))
     done
 
     err "Timed out waiting for $url after ${timeout}s"
+    diagnose_dns "$url"
     return 1
 }
 

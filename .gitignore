@@ -66,3 +66,4 @@ DEPLOYMENT.md
 config/**/*.log
 # Per-chain one-shot registration state written by register-tee — machine-local.
 config/**/*.state
+*.bak

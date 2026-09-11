@@ -22,6 +22,8 @@ services:
       - redis
 
   extension-tee:
+    # go/Dockerfile builds GOARCH=amd64, so the base image must match.
+    platform: linux/amd64
     build:
       context: .
       # Selected by LANGUAGE in .env; start-services.sh resolves <LANGUAGE>/Dockerfile

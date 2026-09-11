@@ -9,7 +9,7 @@ Linear recipe to deploy a TEE extension to Flare Coston or Coston2. Run the step
 - 🔨 Foundry (`forge`, `cast`)
 - `jq`
 - Bash (Git Bash on Windows works)
-- VPN access to Flare's indexer DB (`35.241.249.150:3306`)
+- Reachable Coston2 c-chain-indexer (`34.38.55.247:3306`; credentials stay in the gitignored proxy toml)
 
 ## 1. Get the extension repo
 

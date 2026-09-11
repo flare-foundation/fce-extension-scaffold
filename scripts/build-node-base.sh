@@ -39,7 +39,7 @@ log "  tee-node pin: $TEE_NODE_VERSION"
 log "  git ref:      $TEE_NODE_REF"
 log "  SOURCE_DATE_EPOCH: $SOURCE_DATE_EPOCH"
 
-docker build \
+docker build --platform linux/amd64 \
     -f "$PROJECT_DIR/docker/node-base.Dockerfile" \
     --build-arg "TEE_NODE_REF=$TEE_NODE_REF" \
     --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
