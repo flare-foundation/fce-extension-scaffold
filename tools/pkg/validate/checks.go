@@ -83,7 +83,7 @@ func RegisterDeployChecks(r *Report, client *ethclient.Client, key *ecdsa.Privat
 
 	// D5: Check deployer funds.
 	if key != nil && client != nil {
-		if err := KeyHasFunds(client, key, MinDeployBalance); err != nil {
+		if err := KeyCanAffordDeploy(client, key, DeployGasUnits); err != nil {
 			r.Add(CheckResult{
 				Step:    "deploy",
 				ID:      "D5",

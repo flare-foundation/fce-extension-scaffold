@@ -40,7 +40,7 @@ func main() {
 	if err := validate.AddressHasCode(testSupport.ChainClient, testSupport.Addresses.FlareTeeManager, "FlareTeeManager"); err != nil {
 		fccutils.FatalWithCause(err)
 	}
-	if err := validate.KeyHasFunds(testSupport.ChainClient, testSupport.Prv, validate.MinDeployBalance); err != nil {
+	if err := validate.KeyCanAffordDeploy(testSupport.ChainClient, testSupport.Prv, validate.DeployGasUnits); err != nil {
 		fccutils.FatalWithCause(err)
 	}
 
