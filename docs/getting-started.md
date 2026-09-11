@@ -148,7 +148,8 @@ development. `post-build.sh` registers the set on-chain idempotently before
 | port `6674`/`6382` already allocated | another chain's stack is still up — every chain binds the same host ports, so stop it first |
 | `config/proxy/extension_proxy.<chain>.docker.toml not found` | `use-chain.sh <chain>` generates it; fill in the `[db]` credentials |
 | docker `rootfs` mount error, or the path is now a directory | an older run mounted the missing config; `rm -rf` the directory, then re-run `use-chain.sh <chain>` |
-| `tee-node v… is below the v0.0.22 minimum` | bump the pin in `go/go.mod` **and** `tools/go.mod` |
+| `tee-node v… is below the v0.0.24 minimum` | bump the pin in `go/go.mod` **and** `tools/go.mod` |
+| `tee-proxy v… is below the v0.0.19 minimum` | bump the pin in `tools/go.mod` **and** `proxy/Dockerfile` — v0.0.18 cannot advance signing policies |
 | `tee-node mismatch` from `check-versions.sh` | the two `go.mod` pins drifted; align them or the Go and non-Go images run different builds |
 | `signature must be 65 bytes, got 0` | `CHAIN_ID` unset → `chainID=0` |
 | `Verification.ChallengeExpired` | `register-tee` ran without `-command rRap` |

@@ -83,7 +83,7 @@ Details in [cloudflared.md](cloudflared.md).
 |---|---|
 | `pollAction` timeout, `/action/result` 404 | multiple active TEE machines; pause the stale ones |
 | `Verification.ChallengeExpired` | re-registration without `-command rRap` |
-| `no round` / 404 from the FTDC proxy | proxy signing policy out of sync with the on-chain reward epoch; `register-tee` pre-flights this |
+| `no round` / 404 from the FTDC proxy | registering node's `lastSigningPolicyId` behind the chain (stale indexer/relay). `register-tee` only pre-flights the *FTDC* proxy. Restart `ext-proxy` after updating the toml — do not restart the TEE |
 | `signature must be 65 bytes, got 0` | `CHAIN_ID` unset on the node |
 | `InvalidTeePublicKeyOrSignature` | node `CHAIN_ID`, proxy `chain_id` and the registry disagree — all three must say 114 |
 | Instructions never arrive | `EXT_PROXY_URL` not reachable from outside, or a rotated tunnel URL left stale in `.env` |

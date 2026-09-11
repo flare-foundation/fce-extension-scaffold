@@ -56,7 +56,8 @@ fi
 # --- 1b. tee-node must not sit below the platform minimum ---
 # sort -V puts the lower version first. ponytail: misreads a pseudo-version of
 # the floor tag itself; not worth a real semver parser for one comparison.
-TEE_NODE_MIN="v0.0.22"
+# v0.0.24 is the signing-policy sync floor; current relay needs v0.0.26.
+TEE_NODE_MIN="v0.0.24"
 if [[ -n "$EXT_NODE" && "$(printf '%s\n%s\n' "$TEE_NODE_MIN" "$EXT_NODE" | sort -V | head -1)" != "$TEE_NODE_MIN" ]]; then
     echo -e "${RED}  tee-node $EXT_NODE is below the $TEE_NODE_MIN minimum${NC}" >&2
     echo "    bump the pin in $EXT_GOMOD and $TOOLS_GOMOD" >&2
@@ -88,6 +89,14 @@ elif [[ "$TOOLS_PROXY" != "$TEE_PROXY_VERSION" ]]; then
     FAILED=1
 else
     log "tee-proxy      $TOOLS_PROXY (tools == proxy/Dockerfile)"
+fi
+
+# v0.0.18 cannot advance signing policies against the current relay.
+TEE_PROXY_MIN="v0.0.19"
+if [[ -n "$TOOLS_PROXY" && "$(printf '%s\n%s\n' "$TEE_PROXY_MIN" "$TOOLS_PROXY" | sort -V | head -1)" != "$TEE_PROXY_MIN" ]]; then
+    echo -e "${RED}  tee-proxy $TOOLS_PROXY is below the $TEE_PROXY_MIN minimum${NC}" >&2
+    echo "    bump the pin in $TOOLS_GOMOD and proxy/Dockerfile" >&2
+    FAILED=1
 fi
 
 # --- 4. Report the ref that language images will clone ---
