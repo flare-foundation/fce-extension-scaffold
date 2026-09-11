@@ -103,11 +103,14 @@ fi
 step 2 "Deploy InstructionSender contract"
 cd "$PROJECT_DIR/tools"
 : > "$LOG_FILE"  # truncate log file
-INSTRUCTION_SENDER=$(go run ./cmd/deploy-contract -a "$ADDRESSES_FILE" -c "$CHAIN_URL" 2>"$LOG_FILE" | tail -1) || {
+# Combined: the tool logs to stdout, so 2> alone threw the real error away.
+go run ./cmd/deploy-contract -a "$ADDRESSES_FILE" -c "$CHAIN_URL" >"$LOG_FILE" 2>&1 || {
     echo -e "${RED}Deploy failed. Logs:${NC}" >&2
     cat "$LOG_FILE" >&2
     die "Deploy failed — see output above"
 }
+
+INSTRUCTION_SENDER=$(tail -1 "$LOG_FILE")
 
 # Validate captured address
 [[ "$INSTRUCTION_SENDER" =~ ^0x[0-9a-fA-F]{40}$ ]] || {
