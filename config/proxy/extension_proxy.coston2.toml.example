@@ -16,7 +16,7 @@ log_queries = false
 
 [addresses]
 flare_systems_manager = "0xA90Db6D10F856799b10ef2A77EBCbF460aC71e52"
-relay = "0xa10B672D1c62e5457b17af63d4302add6A99d7dE"
+relay = "0x5017728F117501A24EF9C3756C07f0d564598596"
 voter_registry = "0x6a0AF07b7972177B176d3D422555cbc98DfDe914"
 
 
