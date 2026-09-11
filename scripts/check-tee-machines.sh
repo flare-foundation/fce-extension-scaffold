@@ -20,20 +20,25 @@ Usage:
   $(basename "$0")                  the chain from .env
   $(basename "$0") --chain coston   a specific chain
   $(basename "$0") --ext 0          only this extension id
+  $(basename "$0") --pause          pause each stale machine of yours, asking first
+  $(basename "$0") --pause --include-unreachable
+                                    also offer machines whose proxy did not answer
 
 A relaunched Confidential Space mints a new key but leaves the old machine
 active on-chain, and getRandomTeeIds routes to it anyway — those instructions
 404 forever. This asks each machine's own proxy which key it holds now and
-compares. Reports only: pause commands are printed, never run.
+compares. Reports only unless --pause is given; FTDC machines are never touched.
 EOF
 }
 
 TIMEOUT=12
-CHAIN_ARG=""; EXT_ARG=""
+CHAIN_ARG=""; EXT_ARG=""; PAUSE=false; INCLUDE_UNREACHABLE=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --chain) CHAIN_ARG="${2:-}"; shift 2 ;;
         --ext)   EXT_ARG="${2:-}"; shift 2 ;;
+        --pause) PAUSE=true; shift ;;
+        --include-unreachable) INCLUDE_UNREACHABLE=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *) die "unknown argument: $1 (try --help)" ;;
     esac
@@ -97,7 +102,7 @@ show_policy() {
     done
 }
 
-STALE=(); URLS=()
+STALE=(); UNVERIFIED=(); URLS=()
 check_extension() {
     local ext="$1" label="$2" out line id url live n_live=0 n_stale=0 n_unk=0
     # query-tee -ext is an int64, so the call is decimal; the display stays hex.
@@ -115,7 +120,7 @@ check_extension() {
         [[ " ${URLS[*]} " == *" $url "* ]] || URLS+=("$url")
         if ! live=$(live_tee_id "$url"); then
             printf '  %b%-10s%b %s  %s  (proxy unreachable)\n' "$YELLOW" "UNREACHABLE" "$NC" "$id" "$url"
-            n_unk=$((n_unk+1)); continue
+            UNVERIFIED+=("$ext|$id|$url"); n_unk=$((n_unk+1)); continue
         fi
         if [[ "$(lc "$id")" == "$live" ]]; then
             printf '  %b%-10s%b %s  %s\n' "$GREEN" "LIVE" "$NC" "$id" "$url"; n_live=$((n_live+1))
@@ -146,12 +151,19 @@ fi
 show_policy
 
 echo
-if (( ${#STALE[@]} == 0 )); then
+TARGETS=("${STALE[@]:+${STALE[@]}}")
+if [[ "$INCLUDE_UNREACHABLE" == "true" ]]; then
+    TARGETS+=("${UNVERIFIED[@]:+${UNVERIFIED[@]}}")
+fi
+
+if (( ${#TARGETS[@]} == 0 )); then
     log "no stale machines found"
+    # An unreachable machine may be a dead tunnel or just a restart — you decide.
+    (( ${#UNVERIFIED[@]} )) && log "${#UNVERIFIED[@]} unverified: re-run with --pause --include-unreachable to act on them"
     exit 0
 fi
 
-echo -e "${RED}=== ${#STALE[@]} stale machine(s) ===${NC}"
+echo -e "${RED}=== ${#TARGETS[@]} machine(s) to review ===${NC}"
 cat <<EOF
 
 Pausing is IRREVERSIBLE: there is no unpause, only toProduction with a fresh
@@ -159,14 +171,25 @@ availability proof. Check each address against the LIVE rows above before runnin
 anything — pausing the live machine takes the extension down.
 
 EOF
-for entry in "${STALE[@]}"; do
+for entry in "${TARGETS[@]}"; do
     IFS='|' read -r ext id url <<< "$entry"
     if [[ "$ext" == "0" ]]; then
         echo "  # $id ($url) — extensionId=0 is Flare's FTDC infrastructure."
         echo "  # Not yours to pause: report it to whoever operates $CHAIN."
+    elif [[ "$PAUSE" == "true" ]]; then
+        [[ -n "${DEPLOYMENT_PRIVATE_KEY:-}" ]] || die "--pause needs DEPLOYMENT_PRIVATE_KEY"
+        why="key does not match"
+        [[ " ${UNVERIFIED[*]:-} " == *" $entry "* ]] && why="proxy unreachable — key NOT verified"
+        read -r -p "  pause $id ($url) — $why? this cannot be undone [y/N] " answer || answer=""
+        if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+            cast send "$REG" 'pause(address)' "$id" --rpc-url "$CHAIN_URL" "${CAST_CHAIN[@]}" --private-key "$DEPLOYMENT_PRIVATE_KEY"
+        else
+            echo "  skipped $id"
+        fi
     else
         echo "  cast send $REG 'pause(address)' $id \\"
         echo "      --rpc-url $CHAIN_URL ${CAST_CHAIN[*]} --private-key \$DEPLOYMENT_PRIVATE_KEY"
+        echo "  (or re-run with --pause to be asked about each one)"
     fi
     echo
 done
