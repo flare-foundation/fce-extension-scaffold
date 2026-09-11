@@ -8,7 +8,7 @@
 # image uses — no separate tee-node clone or replace directive is needed.
 # Override via build arg when bumping both sides together.
 
-ARG TEE_PROXY_VERSION=v0.0.18
+ARG TEE_PROXY_VERSION=v0.0.24
 
 # NOTE: not pinned by digest (unlike the main Dockerfile) — this is a dev convenience build.
 # For full reproducibility, pin by digest: golang:1.25.1-alpine@sha256:...
