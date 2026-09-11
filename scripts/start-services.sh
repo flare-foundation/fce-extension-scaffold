@@ -353,7 +353,9 @@ if [[ "$USE_LOCAL" == "false" ]]; then
     E2E="$SCRIPT_DIR/e2e.sh"
     EXT_PROXY_URL="${EXT_PROXY_URL:-http://localhost:6674}"
     log "Waiting for extension proxy at $EXT_PROXY_URL/info ..."
-    "$E2E" wait-for-url "$EXT_PROXY_URL/info" 120
+    # Quick-tunnel propagation is wildly variable: 4s and 66s both observed,
+    # and 120s is not always enough.
+    "$E2E" wait-for-url "$EXT_PROXY_URL/info" "${PROXY_WAIT_TIMEOUT:-300}"
 
     # Validate EXTENSION_ID is recognized by proxy
     log "Validating EXTENSION_ID against proxy..."
