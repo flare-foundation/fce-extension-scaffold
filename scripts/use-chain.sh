@@ -88,6 +88,19 @@ list_chains() {
 mark() { [[ -e "$1" ]] && echo "ok" || echo "MISSING"; }
 lower() { tr '[:upper:]' '[:lower:]' <<< "${1:-}"; }
 
+# Reward epoch from a Relay (kind=relay) or FlareSystemsManager (kind=fsm).
+# Empty when offline, unset, or the address is not that contract.
+chain_epoch() {
+    local addr="$1" url="$2" id="$3" kind="$4" sig out
+    [[ -n "$addr" && -n "$url" && -n "$id" ]] || return 0
+    command -v cast >/dev/null || return 0
+    if [[ "$kind" == fsm ]]; then sig='getCurrentRewardEpochId()(uint256)'
+    else sig='lastInitializedRewardEpochData()(uint32,uint32)'; fi
+    # cast reads CHAIN from this repo's .env as its own --chain flag, so pin it.
+    out=$(CHAIN= cast call "$addr" "$sig" --rpc-url "$url" --chain "$id" 2>/dev/null | head -1 | awk '{print $1}')
+    [[ "$out" =~ ^[0-9]+$ ]] && echo "$out"
+}
+
 show_status() {
     local env="$PROJECT_DIR/.env"
     [[ -f "$env" ]] || { echo "  no .env yet — run: $SCRIPT_NAME <chain>"; return; }
@@ -133,13 +146,25 @@ show_status() {
     fi
 
     if [[ -f "$toml" && -f "$dump" ]]; then
-        echo "  addresses    (proxy toml vs deployed-addresses.json)"
-        local k n tv dv st
+        # The toml is what the proxy reads; the dump is only a second opinion, so
+        # a disagreement cannot say which side is stale. The chain can.
+        echo "  addresses    (proxy toml; chain is the authority, json a cross-check)"
+        local k n tv dv st url epoch rep
+        url=$(get_val "$env" CHAIN_URL)
+        epoch=$(chain_epoch "$(toml_val "$toml" flare_systems_manager)" "$url" "$cid" fsm)
         while IFS=: read -r k n; do
             [[ -n "$k" ]] || continue
             tv=$(toml_val "$toml" "$k")
             dv=$(jq -r --arg n "$n" '.[]|select(.name==$n)|.address' "$dump" 2>/dev/null | head -1)
-            if [[ "$(lower "$tv")" == "$(lower "$dv")" && -n "$tv" ]]; then st="ok"; else st="DRIFT"; fi
+            if [[ -z "$tv" ]]; then st="MISSING from toml"
+            elif [[ "$(lower "$tv")" == "$(lower "$dv")" ]]; then st="ok"
+            else st="json disagrees: ${dv:-<none>}"; fi
+            if [[ "$k" == relay && -n "$epoch" ]]; then
+                rep=$(chain_epoch "$tv" "$url" "$cid" relay)
+                if [[ -z "$rep" ]]; then st="unverified (offline?) — $st"
+                elif (( rep + 1 >= epoch )); then st="$st (live at epoch $rep)"
+                else st="STALE — stuck at $rep, chain is at $epoch"; fi
+            fi
             printf '    %-22s %-44s %s\n' "$k" "${tv:-<unset>}" "$st"
         done <<EOF
 relay:Relay
