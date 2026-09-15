@@ -20,6 +20,19 @@ chain_id_for() {
 
 chain_rpc_for() { echo "https://$1-api.flare.network/ext/C/rpc"; }
 
+# Blockscout-based explorer for each live chain. Empty for local — there's no
+# explorer for the devnet, so verify-contract.sh skips it.
+chain_explorer_for() {
+    case "${1:-}" in
+        local) echo "" ;;
+        coston) echo "https://coston-explorer.flare.network" ;;
+        coston2) echo "https://coston2-explorer.flare.network" ;;
+        songbird) echo "https://songbird-explorer.flare.network" ;;
+        flare) echo "https://flare-explorer.flare.network" ;;
+        *) return 1 ;;
+    esac
+}
+
 resolve_chain() {
     CHAIN_ARG="${1:-${CHAIN:-}}"
     if [[ -z "$CHAIN_ARG" ]]; then
