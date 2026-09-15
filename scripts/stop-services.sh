@@ -116,14 +116,18 @@ if [[ -f "$CF_COMPOSE" ]]; then
     # Never-empty: bash 3.2 + set -u treats "${empty[@]}" as unbound.
     CF_COMPOSE_CMD=(docker compose -f "$CF_COMPOSE")
     [[ "$USE_LOCAL" == "true" ]] && CF_COMPOSE_CMD=(docker compose -p tunnel-local -f "$CF_COMPOSE")
+    # -a: also catch a crashed/exited tunnel container, not just a running one —
+    # otherwise a dead container is left behind and the next start-services.sh
+    # run restarts it in place, minting a fresh quick-tunnel URL that nothing
+    # here caused to be re-synced.
     if [[ "$USE_TUNNEL" == "true" || "${SIMULATED_TEE:-true}" == "true" ]]; then
-        if "${CF_COMPOSE_CMD[@]}" ps -q cloudflared 2>/dev/null | grep -q .; then
+        if "${CF_COMPOSE_CMD[@]}" ps -aq cloudflared 2>/dev/null | grep -q .; then
             log "Stopping the shared Cloudflare tunnel (last)..."
             "${CF_COMPOSE_CMD[@]}" down || log "WARNING: failed to stop cloudflared"
         else
             log "No tunnel running — nothing to stop."
         fi
-    elif "${CF_COMPOSE_CMD[@]}" ps -q cloudflared 2>/dev/null | grep -q .; then
+    elif "${CF_COMPOSE_CMD[@]}" ps -aq cloudflared 2>/dev/null | grep -q .; then
         log "Leaving the shared Cloudflare tunnel running (pass --tunnel to stop it)."
     fi
 fi
